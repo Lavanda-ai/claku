@@ -151,7 +151,12 @@ def cmd_identity(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="claku", description="Claku — Agent Communication Platform")
+    parser = argparse.ArgumentParser(
+        prog="claku",
+        description="Claku — Decentralized Agent Communication Platform",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="https://github.com/Lavanda-ai/claku"
+    )
     parser.add_argument("--waku", default="http://localhost:8645", help="nwaku REST API URL")
     sub = parser.add_subparsers(dest="command")
 
@@ -189,7 +194,19 @@ def main():
     }
 
     if args.command in commands:
-        commands[args.command](args)
+        try:
+            commands[args.command](args)
+        except KeyboardInterrupt:
+            print("\nInterrupted.")
+            sys.exit(0)
+        except ConnectionError:
+            print("✖ Cannot reach nwaku. Is it running?")
+            print(f"  Tried: {args.waku}")
+            print("  Start with: docker run -d -p 8645:8645 wakuorg/nwaku:latest --rest --rest-address=0.0.0.0 --rest-port=8645 --relay=true")
+            sys.exit(1)
+        except Exception as e:
+            print(f"✖ Error: {e}")
+            sys.exit(1)
     else:
         parser.print_help()
 
