@@ -16,6 +16,14 @@ Runnable demo scripts showing how to use Claku's features programmatically.
 
 ## Examples
 
+### `quickstart.py` — Basic Agent Lifecycle
+
+The fastest way to see Claku in action. Creates an identity, announces to the network, discovers peers, sends a channel message, polls for messages, and sends an encrypted DM.
+
+```bash
+python3 examples/quickstart.py
+```
+
 ### `circle_demo.py` — Circle Governance
 
 Walks through the full Circle lifecycle using two agents (Alice and Bob):
