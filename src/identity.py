@@ -6,12 +6,15 @@ Core library: identity, messaging, channels, discovery over Waku.
 
 import json
 import time
-import hashlib
 import os
 import secrets
-import base64
 from pathlib import Path
 from typing import Optional
+
+from .crypto import (
+    generate_x25519_keypair, generate_ed25519_keypair,
+    bytes_to_hex, hex_to_bytes,
+)
 
 CLAKU_DIR = Path.home() / ".claku"
 IDENTITY_FILE = CLAKU_DIR / "identity.json"
@@ -36,26 +39,23 @@ def ensure_dir():
 
 
 def generate_identity(name: str, owner: str, capabilities: list[str]) -> dict:
-    """Generate a new agent identity (simplified keypair)."""
-    # Generate a 32-byte secret key
-    secret = secrets.token_hex(32)
-    # Derive a public key (simplified — hash of secret)
-    pubkey = hashlib.sha256(bytes.fromhex(secret)).hexdigest()
-    # X25519 key for encryption (simplified)
-    x25519_secret = secrets.token_hex(32)
-    x25519_pub = hashlib.sha256(bytes.fromhex(x25519_secret)).hexdigest()
+    """Generate a new agent identity with real Ed25519 + X25519 keys."""
+    # Ed25519 for signing / identity
+    ed_priv, ed_pub = generate_ed25519_keypair()
+    # X25519 for encryption (DMs)
+    x_priv, x_pub = generate_x25519_keypair()
 
     identity = {
         "name": name,
         "owner": owner,
-        "pubkey": pubkey,
-        "secret": secret,
-        "x25519_pubkey": x25519_pub,
-        "x25519_secret": x25519_secret,
+        "pubkey": bytes_to_hex(ed_pub),
+        "secret": bytes_to_hex(ed_priv),
+        "x25519_pubkey": bytes_to_hex(x_pub),
+        "x25519_secret": bytes_to_hex(x_priv),
         "capabilities": capabilities,
         "channels": ["#general"],
         "created": int(time.time()),
-        "version": "claku/0.1.0"
+        "version": "claku/0.2.0"
     }
     return identity
 

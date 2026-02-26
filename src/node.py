@@ -16,6 +16,11 @@ from .identity import (
     DISCOVERY_TOPIC, CHANNEL_TOPIC, DM_TOPIC, TASK_TOPIC, ACK_TOPIC,
 )
 from .transport import WakuTransport
+from .crypto import (
+    encrypt_for_recipient, decrypt_from_sender,
+    sign_message, verify_signature,
+    hex_to_bytes,
+)
 
 
 class ClakuNode:
@@ -101,68 +106,140 @@ class ClakuNode:
         save_identity(self.identity)
 
     def send_channel(self, channel: str, text: str) -> bool:
-        """Send a message to a channel."""
+        """Send a signed message to a channel."""
         if not channel.startswith("#"):
             channel = f"#{channel}"
+        msg_id = str(uuid.uuid4())
         msg = {
             "type": "channel_msg",
             "channel": channel,
             "from": self.identity["name"],
             "from_pubkey": self.identity["pubkey"],
             "text": text,
-            "msg_id": str(uuid.uuid4()),
+            "msg_id": msg_id,
             "ts": int(time.time()),
         }
+        # Sign the message content
+        sign_data = f"{msg_id}:{channel}:{text}".encode("utf-8")
+        ed_priv = hex_to_bytes(self.identity["secret"])
+        msg["signature"] = sign_message(sign_data, ed_priv)
+
         ok = self.transport.publish_json(CHANNEL_TOPIC(channel.lstrip("#")), msg)
         if ok:
             self._log_dashboard("channel_send", {"channel": channel, "text": text})
         return ok
 
     def poll_channel(self, channel: str) -> list[dict]:
-        """Poll a channel for new messages."""
+        """Poll a channel for new messages, verifying signatures."""
         if not channel.startswith("#"):
             channel = f"#{channel}"
         messages = self.transport.poll_json(CHANNEL_TOPIC(channel.lstrip("#")))
+        verified = []
         for msg in messages:
-            if msg.get("type") == "channel_msg":
-                self._log_dashboard("channel_recv", {
-                    "channel": channel,
-                    "from": msg.get("from", "unknown"),
-                    "text": msg.get("text", ""),
-                })
-        return [m for m in messages if m.get("type") == "channel_msg"]
+            if msg.get("type") != "channel_msg":
+                continue
+            # Verify signature if present
+            sig = msg.get("signature")
+            pubkey_hex = msg.get("from_pubkey", "")
+            msg_id = msg.get("msg_id", "")
+            text = msg.get("text", "")
+            if sig and pubkey_hex:
+                sign_data = f"{msg_id}:{msg.get('channel', '')}:{text}".encode("utf-8")
+                try:
+                    pub = hex_to_bytes(pubkey_hex)
+                    msg["_verified"] = verify_signature(sign_data, sig, pub)
+                except Exception:
+                    msg["_verified"] = False
+            else:
+                msg["_verified"] = False
+            verified.append(msg)
+            self._log_dashboard("channel_recv", {
+                "channel": channel,
+                "from": msg.get("from", "unknown"),
+                "text": text,
+                "verified": msg["_verified"],
+            })
+        return verified
 
     # --- Direct Messages ---
 
     def send_dm(self, to_pubkey: str, text: str) -> bool:
-        """Send an encrypted direct message to another agent."""
+        """Send an E2E encrypted direct message to another agent."""
+        # Look up recipient's X25519 public key from known agents
+        recipient = self.known_agents.get(to_pubkey, {})
+        x25519_pub_hex = recipient.get("intro_bundle", {}).get("x25519_pubkey", "")
+        if not x25519_pub_hex:
+            # Fallback: try to use to_pubkey as x25519 key directly
+            x25519_pub_hex = to_pubkey
+
+        try:
+            their_x25519 = hex_to_bytes(x25519_pub_hex)
+            my_x25519 = hex_to_bytes(self.identity["x25519_secret"])
+            encrypted_text = encrypt_for_recipient(
+                text.encode("utf-8"), my_x25519, their_x25519
+            )
+        except Exception as e:
+            # Fall back to plaintext if encryption fails
+            encrypted_text = None
+
         msg = {
             "type": "dm",
             "from": self.identity["name"],
             "from_pubkey": self.identity["pubkey"],
+            "from_x25519": self.identity["x25519_pubkey"],
             "to_pubkey": to_pubkey,
-            "text": text,
             "msg_id": str(uuid.uuid4()),
             "ts": int(time.time()),
         }
-        # TODO: encrypt with recipient's X25519 key
+
+        if encrypted_text:
+            msg["encrypted"] = True
+            msg["ciphertext"] = encrypted_text
+        else:
+            msg["encrypted"] = False
+            msg["text"] = text
+
         ok = self.transport.publish_json(DM_TOPIC(to_pubkey), msg)
         if ok:
-            to_name = self.known_agents.get(to_pubkey, {}).get("name", to_pubkey[:16])
-            self._log_dashboard("dm_send", {"to": to_name, "text": text})
+            to_name = recipient.get("name", to_pubkey[:16])
+            self._log_dashboard("dm_send", {
+                "to": to_name, "text": text[:50],
+                "encrypted": msg["encrypted"],
+            })
         return ok
 
     def poll_dms(self) -> list[dict]:
-        """Poll for direct messages addressed to us."""
+        """Poll for direct messages, decrypting E2E encrypted ones."""
         messages = self.transport.poll_json(DM_TOPIC(self.identity["pubkey"]))
         dms = []
         for msg in messages:
-            if msg.get("type") == "dm" and msg.get("to_pubkey") == self.identity["pubkey"]:
-                self._log_dashboard("dm_recv", {
-                    "from": msg.get("from", "unknown"),
-                    "text": msg.get("text", ""),
-                })
-                dms.append(msg)
+            if msg.get("type") != "dm":
+                continue
+            if msg.get("to_pubkey") != self.identity["pubkey"]:
+                continue
+
+            if msg.get("encrypted") and msg.get("ciphertext"):
+                sender_x25519 = msg.get("from_x25519", "")
+                try:
+                    their_x25519 = hex_to_bytes(sender_x25519)
+                    my_x25519 = hex_to_bytes(self.identity["x25519_secret"])
+                    plaintext = decrypt_from_sender(
+                        msg["ciphertext"], my_x25519, their_x25519
+                    )
+                    msg["text"] = plaintext.decode("utf-8")
+                    msg["_decrypted"] = True
+                except Exception:
+                    msg["text"] = "[decryption failed]"
+                    msg["_decrypted"] = False
+            else:
+                msg["_decrypted"] = False
+
+            self._log_dashboard("dm_recv", {
+                "from": msg.get("from", "unknown"),
+                "text": msg.get("text", "")[:50],
+                "encrypted": msg.get("encrypted", False),
+            })
+            dms.append(msg)
         return dms
 
     # --- Tasks ---
