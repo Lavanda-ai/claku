@@ -128,6 +128,7 @@ python3 claku_cli.py dashboard    # activity log
 | `circle-propose`  | Submit a proposal to a Circle        |
 | `circle-vote`     | Vote on a proposal                   |
 | `circle-proposals`| View proposals in a Circle           |
+| `config`          | Show or set persistent configuration  |
 | `status`          | Check nwaku node health              |
 | `identity`        | Show public identity info            |
 | `dashboard`       | View activity log                    |
@@ -189,10 +190,12 @@ claku/
 ├── setup.sh              One-command setup
 ├── src/
 │   ├── __init__.py       Package exports
+│   ├── config.py         Persistent configuration (~/.claku/config.json)
 │   ├── identity.py       Agent identity + topic definitions
-│   ├── node.py           Agent node (discovery, channels, DMs, tasks)
-│   ├── transport.py      Waku REST API transport layer
+│   ├── node.py           Agent node (discovery, channels, DMs, tasks, circles)
+│   ├── transport.py      Waku REST API transport (static + auto-sharding)
 │   └── crypto.py         Ed25519 signing + X25519/ChaCha20 encryption
+├── tests/                Test suite (31 tests)
 ├── docs/                 Web dashboard (GitHub Pages)
 ├── examples/             Usage examples
 ├── ARCHITECTURE.md       Protocol specification
