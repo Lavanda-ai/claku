@@ -224,3 +224,108 @@ class WakuTransport:
             except (json.JSONDecodeError, KeyError):
                 continue
         return results
+
+    def store_query(
+        self,
+        content_topics: Optional[list[str]] = None,
+        page_size: int = 20,
+        cursor: Optional[str] = None,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+    ) -> dict:
+        """Query historical messages from the Waku Store protocol (v3).
+
+        Args:
+            content_topics: Filter by content topics.
+            page_size: Max messages per page (default 20).
+            cursor: Pagination cursor from a previous query.
+            start_time: Start time filter (nanoseconds since epoch).
+            end_time: End time filter (nanoseconds since epoch).
+
+        Returns:
+            Dict with ``messages`` (list), ``paginationCursor`` (str or None),
+            and ``statusCode``.
+        """
+        params = [f"pageSize={page_size}"]
+        if content_topics:
+            for ct in content_topics:
+                params.append(f"contentTopics={urllib.parse.quote(ct, safe='')}")
+        if cursor:
+            params.append(f"cursor={cursor}")
+        if start_time:
+            params.append(f"startTime={start_time}")
+        if end_time:
+            params.append(f"endTime={end_time}")
+
+        query = "&".join(params)
+        path = f"/store/v3/messages?{query}"
+        status, body = self._request("GET", path)
+
+        if status != 200:
+            return {"messages": [], "statusCode": status, "error": body}
+
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError:
+            return {"messages": [], "statusCode": status, "error": "Invalid JSON"}
+
+        # Decode payloads
+        messages = []
+        for msg in data.get("messages", []):
+            entry = {
+                "message_hash": msg.get("messageHash", ""),
+            }
+            # Full message may include payload if includeData is set
+            if "payload" in msg:
+                try:
+                    entry["payload"] = base64.b64decode(msg["payload"])
+                except Exception:
+                    entry["payload"] = b""
+            if "contentTopic" in msg:
+                entry["content_topic"] = msg["contentTopic"]
+            if "timestamp" in msg:
+                entry["timestamp"] = msg["timestamp"]
+            messages.append(entry)
+
+        return {
+            "messages": messages,
+            "paginationCursor": data.get("paginationCursor"),
+            "statusCode": data.get("statusCode", status),
+        }
+
+    def store_query_json(
+        self,
+        content_topics: Optional[list[str]] = None,
+        page_size: int = 20,
+    ) -> list[dict]:
+        """Query and parse JSON messages from the Waku Store.
+
+        Convenience wrapper that decodes JSON payloads and paginates
+        through all available results.
+
+        Args:
+            content_topics: Filter by content topics.
+            page_size: Messages per page.
+
+        Returns:
+            List of parsed JSON dicts.
+        """
+        results = []
+        cursor = None
+        while True:
+            resp = self.store_query(content_topics, page_size, cursor)
+            for msg in resp.get("messages", []):
+                payload = msg.get("payload", b"")
+                if payload:
+                    try:
+                        parsed = json.loads(payload)
+                        parsed["_message_hash"] = msg.get("message_hash", "")
+                        parsed["_content_topic"] = msg.get("content_topic", "")
+                        parsed["_timestamp"] = msg.get("timestamp", 0)
+                        results.append(parsed)
+                    except (json.JSONDecodeError, KeyError):
+                        continue
+            cursor = resp.get("paginationCursor")
+            if not cursor or not resp.get("messages"):
+                break
+        return results
