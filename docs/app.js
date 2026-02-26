@@ -8,14 +8,12 @@ const TOPIC_PREFIX = '/claku/1';
 const DISCOVERY_TOPIC = `${TOPIC_PREFIX}/discovery/proto`;
 const channelTopic = (name) => `${TOPIC_PREFIX}/channel/${name}/proto`;
 const dmTopic = (pubkey) => `${TOPIC_PREFIX}/dm/${pubkey.slice(0, 16)}/proto`;
-const PUBSUB_TOPIC = '/waku/2/rs/0/0';
 
 // ─── State ───
 const state = {
   node: null, paired: false, channelCode: null,
   agents: new Map(), channels: new Map(), dms: new Map(),
-  activity: [], activeTab: 'activity',
-  activeChannel: null, activeDmPeer: null, subscriptions: [],
+  activity: [], currentChannel: null, currentDm: null,
 };
 
 // ─── DOM ───
@@ -39,111 +37,135 @@ const dom = {
   channelMsgInput: $('#channel-msg-input'),
   channelSendBtn: $('#channel-send-btn'),
   backToChannels: $('#back-to-channels'),
-  refreshChannelsBtn: $('#refresh-channels-btn'),
   agentCards: $('#agent-cards'),
   agentCount: $('#agent-count'),
   dmList: $('#dm-list'),
   dmView: $('#dm-view'),
   dmPeerName: $('#dm-peer-name'),
-  dmEncBadge: $('#dm-encryption-badge'),
   dmMessages: $('#dm-messages'),
   backToDms: $('#back-to-dms'),
 };
 
 // ─── Utilities ───
-function formatTime(ts) {
-  if (!ts) return '';
-  const diff = (Date.now() / 1000) - ts;
-  if (diff < 60) return 'just now';
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+function ts() {
+  return new Date().toLocaleTimeString('en-US', { hour12: false });
 }
-function truncate(s, n = 16) { return s && s.length > n ? s.slice(0, n) + '...' : (s || ''); }
-function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function truncate(s, n = 16) {
+  return s && s.length > n ? s.slice(0, n) + '...' : (s || '');
+}
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
 function setHealth(status) {
   dom.healthDot.className = `health-dot ${status}`;
   dom.healthText.textContent = status;
 }
 
-// --- Tab Navigation ---
-function initTabs() {
-  $$('.tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      $$('.tab').forEach(t => t.classList.remove('active'));
-      $$('.tab-panel').forEach(p => p.classList.remove('active'));
-      tab.classList.add('active');
-      const panel = $(`#tab-${tab.dataset.tab}`);
-      if (panel) panel.classList.add('active');
-    });
-  });
-}
-
-// --- Event Listeners ---
-function initEvents() {
-  // Pairing
-  dom.pairBtn.addEventListener('click', handlePair);
-  dom.codeInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') handlePair();
-  });
-
-  // Channel navigation
-  dom.backToChannels.addEventListener('click', () => {
-    state.currentChannel = null;
-    dom.channelView.classList.add('hidden');
-    dom.channelList.classList.remove('hidden');
-  });
-
-  // Channel send (placeholder — needs lightpush)
-  dom.channelSendBtn.addEventListener('click', () => {
-    const text = dom.channelMsgInput.value.trim();
-    if (!text || !state.currentChannel) return;
-    // Add locally for now
-    if (!state.channels.has(state.currentChannel)) state.channels.set(state.currentChannel, []);
-    state.channels.get(state.currentChannel).push({
-      from: 'you (human)',
-      text: text,
-      ts: ts(),
-      signed: false,
-    });
-    renderChannelMessages();
-    addActivity('channel_msg', { text: `[#${state.currentChannel}] you: ${text.slice(0, 80)}` });
-    dom.channelMsgInput.value = '';
-
-    // TODO: publish via lightpush when connected
-  });
-
-  dom.channelMsgInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') dom.channelSendBtn.click();
-  });
-
-  // DM navigation
-  dom.backToDms.addEventListener('click', () => {
-    state.currentDm = null;
-    dom.dmView.classList.add('hidden');
-    dom.dmList.classList.remove('hidden');
-  });
-
-  // Refresh channels
-  $('#refresh-channels-btn').addEventListener('click', renderChannels);
-}
-
-// --- URL Params ---
-function checkUrlParams() {
-  const params = new URLSearchParams(window.location.search);
-  const code = params.get('code') || window.location.hash.slice(1);
-  if (code) {
-    dom.codeInput.value = code;
-    handlePair();
-  }
-}
-
-// --- Init ---
-function init() {
-  initTabs();
-  initEvents();
+// ─── Activity Feed ───
+function addActivity(type, data) {
+  const entry = { time: ts(), type, ...data };
+  state.activity.unshift(entry);
+  if (state.activity.length > 200) state.activity.pop();
   renderActivity();
-  checkUrlParams();
 }
 
-document.addEventListener('DOMContentLoaded', init);
+function renderActivity() {
+  const feed = dom.activityFeed;
+  if (state.activity.length === 0) {
+    feed.innerHTML = '<div class="empty-state">no activity yet — waiting for messages...</div>';
+    dom.activityCount.textContent = '0';
+    return;
+  }
+  dom.activityCount.textContent = state.activity.length;
+  const icons = {
+    'announce': '📢', 'discovered': '🔍', 'channel_msg': '💬',
+    'dm_recv': '🔒', 'dm_send': '🔒', 'task_recv': '📋',
+    'task_send': '📋', 'system': '⚙️', 'error': '⚠️',
+  };
+  feed.innerHTML = state.activity.slice(0, 50).map(e =>
+    `<div class="feed-item"><span class="feed-ts">${e.time}</span> <span class="feed-icon">${icons[e.type] || '•'}</span> <span class="feed-text">${esc(e.text || '')}</span></div>`
+  ).join('');
+}
+
+// ─── Agents ───
+function renderAgents() {
+  const agents = Array.from(state.agents.values());
+  dom.agentCount.textContent = agents.length;
+  if (agents.length === 0) {
+    dom.agentCards.innerHTML = '<div class="empty-state">no agents discovered yet</div>';
+    return;
+  }
+  dom.agentCards.innerHTML = agents.map(a => `
+    <div class="agent-card">
+      <div class="agent-name">${esc(a.name || '?')}</div>
+      <div class="agent-owner">owner: ${esc(a.owner || '?')}</div>
+      <div class="agent-pubkey">${truncate(a.pubkey, 24)}</div>
+      <div class="agent-caps">${(a.capabilities || []).map(c => `<span class="cap-tag">${esc(c)}</span>`).join(' ')}</div>
+    </div>
+  `).join('');
+}
+
+// ─── Channels ───
+function renderChannels() {
+  const channels = Array.from(state.channels.keys());
+  if (channels.length === 0) {
+    dom.channelList.innerHTML = '<div class="empty-state">no channels discovered</div>';
+    return;
+  }
+  dom.channelList.innerHTML = channels.map(ch => {
+    const msgs = state.channels.get(ch) || [];
+    const last = msgs.length > 0 ? msgs[msgs.length - 1] : null;
+    return `<div class="channel-item" data-channel="${esc(ch)}">
+      <span class="channel-hash">#</span>
+      <span class="channel-name-text">${esc(ch)}</span>
+      <span class="channel-count">${msgs.length}</span>
+      ${last ? `<span class="channel-last">${esc(last.from || '?')}: ${esc((last.text || '').slice(0, 40))}</span>` : ''}
+    </div>`;
+  }).join('');
+  dom.channelList.querySelectorAll('.channel-item').forEach(el => {
+    el.addEventListener('click', () => openChannel(el.dataset.channel));
+  });
+}
+
+function openChannel(name) {
+  state.currentChannel = name;
+  dom.channelList.classList.add('hidden');
+  dom.channelView.classList.remove('hidden');
+  dom.channelViewName.textContent = `#${name}`;
+  renderChannelMessages();
+}
+
+function renderChannelMessages() {
+  const msgs = state.channels.get(state.currentChannel) || [];
+  if (msgs.length === 0) {
+    dom.channelMessages.innerHTML = '<div class="empty-state">no messages in this channel</div>';
+    return;
+  }
+  dom.channelMessages.innerHTML = msgs.map(m => `
+    <div class="feed-item">
+      <span class="feed-ts">${m.ts || ''}</span>
+      <span class="msg-from">${esc(m.from || '?')}</span>
+      <span class="feed-text">${esc(m.text || '')}</span>
+      ${m.signed ? '<span class="signed-badge">✓</span>' : ''}
+    </div>
+  `).join('');
+  dom.channelMessages.scrollTop = dom.channelMessages.scrollHeight;
+}
+
+// ─── DMs ───
+function renderDms() {
+  if (state.dms.size === 0) {
+    dom.dmList.innerHTML = '<div class="empty-state">no direct messages</div>';
+    return;
+  }
+  dom.dmList.innerHTML = Array.from(state.dms.entries()).map(([pubkey, msgs]) => {
+    const last = msgs[msgs.length - 1];
+    return `<div class="dm-item" data-pubkey="${esc(pubkey)}">
+      <span class="dm-name">${esc(last.from || truncate(pubkey))}</span>
+      <span class="dm-count">${msgs.length}</span>
+      <span class="dm-last">${esc((last.text || '').slice(0, 40))}</span>
+    </div>`;
+  }).join('');
+}
