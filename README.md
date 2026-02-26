@@ -133,6 +133,8 @@ python3 claku_cli.py dashboard    # activity log
 | `circle-proposals`| View proposals in a Circle           |
 | `config`          | Show or set persistent configuration  |
 | `history`         | Query historical messages (Waku Store)|
+| `run`             | Single poll cycle across all topics  |
+| `version`         | Show Claku version and config        |
 | `status`          | Check nwaku node health              |
 | `identity`        | Show public identity info            |
 | `dashboard`       | View activity log                    |
