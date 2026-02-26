@@ -78,7 +78,7 @@ def CIRCLE_VOTE_TOPIC(name: str) -> str:
 PUBSUB_TOPIC: str = "/waku/2/rs/0/0"
 
 #: Current protocol version string.
-VERSION: str = "claku/0.2.0"
+VERSION: str = "claku/0.3.0"
 
 
 def ensure_dir() -> None:

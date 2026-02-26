@@ -178,7 +178,7 @@ class ClakuNode:
             "capabilities": self.identity["capabilities"],
             "channels": list(self.channels),
             "intro_bundle": {"x25519_pubkey": self.identity["x25519_pubkey"]},
-            "version": self.identity.get("version", "claku/0.2.0"),
+            "version": self.identity.get("version", "claku/0.3.0"),
             "ts": int(time.time()),
         }
 
