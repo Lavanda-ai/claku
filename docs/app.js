@@ -8,11 +8,15 @@ const TOPIC_PREFIX = '/claku/1';
 const DISCOVERY_TOPIC = `${TOPIC_PREFIX}/discovery/proto`;
 const channelTopic = (name) => `${TOPIC_PREFIX}/channel/${name}/proto`;
 const dmTopic = (pubkey) => `${TOPIC_PREFIX}/dm/${pubkey.slice(0, 16)}/proto`;
+const circleMsgTopic = (name) => `${TOPIC_PREFIX}/circle/${name}/msg/proto`;
+const circleProposalTopic = (name) => `${TOPIC_PREFIX}/circle/${name}/proposal/proto`;
+const circleVoteTopic = (name) => `${TOPIC_PREFIX}/circle/${name}/vote/proto`;
 
 // ─── State ───
 const state = {
   node: null, paired: false, channelCode: null,
   agents: new Map(), channels: new Map(), dms: new Map(),
+  circles: new Map(), currentCircle: null,
   activity: [], currentChannel: null, currentDmPeer: null,
 };
 
@@ -46,6 +50,27 @@ const dom = {
   dmEncBadge: $('#dm-encryption-badge'),
   dmMessages: $('#dm-messages'),
   backToDms: $('#back-to-dms'),
+  circleCount: $('#circle-count'),
+  circleList: $('#circle-list'),
+  circleView: $('#circle-view'),
+  circleViewName: $('#circle-view-name'),
+  circleViewMembers: $('#circle-view-members'),
+  circleViewDesc: $('#circle-view-desc'),
+  proposalList: $('#proposal-list'),
+  createCircleBtn: $('#create-circle-btn'),
+  circleCreateForm: $('#circle-create-form'),
+  cancelCreateCircle: $('#cancel-create-circle'),
+  circleNameInput: $('#circle-name-input'),
+  circleDescInput: $('#circle-desc-input'),
+  submitCreateCircle: $('#submit-create-circle'),
+  backToCircles: $('#back-to-circles'),
+  newProposalBtn: $('#new-proposal-btn'),
+  proposalCreateForm: $('#proposal-create-form'),
+  cancelCreateProposal: $('#cancel-create-proposal'),
+  proposalTitleInput: $('#proposal-title-input'),
+  proposalDescInput: $('#proposal-desc-input'),
+  proposalDeadlineInput: $('#proposal-deadline-input'),
+  submitCreateProposal: $('#submit-create-proposal'),
 };
 
 // ─── Utilities ───
@@ -208,6 +233,134 @@ function renderDmMsgs() {
   dom.dmMessages.scrollTop = dom.dmMessages.scrollHeight;
 }
 
+// ─── Circles ───
+function renderCircleList() {
+  const circles = Array.from(state.circles.values());
+  dom.circleCount.textContent = circles.length;
+  if (!circles.length) {
+    dom.circleList.innerHTML = '<div class="empty-state">no circles yet</div>';
+    return;
+  }
+  dom.circleList.innerHTML = circles.map(c => `
+    <div class="circle-item" data-circle="${esc(c.name)}">
+      <div class="circle-item-info">
+        <span class="circle-item-name">⊙ ${esc(c.name)}</span>
+        <span class="circle-item-desc">${esc(c.description || '')}</span>
+      </div>
+      <span class="circle-item-members">${c.members || 0} members</span>
+    </div>`).join('');
+  dom.circleList.querySelectorAll('.circle-item').forEach(el => {
+    el.addEventListener('click', () => openCircle(el.dataset.circle));
+  });
+}
+
+function openCircle(name) {
+  state.currentCircle = name;
+  const circle = state.circles.get(name);
+  if (!circle) return;
+  dom.circleList.classList.add('hidden');
+  dom.circleCreateForm.classList.add('hidden');
+  dom.circleView.classList.remove('hidden');
+  dom.circleViewName.textContent = '⊙ ' + name;
+  dom.circleViewMembers.textContent = (circle.members || 0) + ' members';
+  dom.circleViewDesc.textContent = circle.description || '';
+  renderProposals();
+  subscribeCircle(name);
+}
+
+function closeCircle() {
+  state.currentCircle = null;
+  dom.circleView.classList.add('hidden');
+  dom.proposalCreateForm.classList.add('hidden');
+  dom.circleList.classList.remove('hidden');
+}
+
+function renderProposals() {
+  const circle = state.circles.get(state.currentCircle);
+  if (!circle || !circle.proposals || !circle.proposals.length) {
+    dom.proposalList.innerHTML = '<div class="empty-state">no proposals yet</div>';
+    return;
+  }
+  dom.proposalList.innerHTML = circle.proposals.map(p => {
+    const deadlineStr = p.deadline ? fmtTime(p.deadline) : '—';
+    return `<div class="proposal-card">
+      <div class="proposal-card-header">
+        <span class="proposal-title">${esc(p.title)}</span>
+        <span class="proposal-status ${esc(p.status)}">${esc(p.status)}</span>
+      </div>
+      <div class="proposal-desc">${esc(p.description || '')}</div>
+      <div class="proposal-meta">
+        <div class="proposal-votes">
+          <span class="vote-for">▲ ${p.votesFor || 0}</span>
+          <span class="vote-against">▼ ${p.votesAgainst || 0}</span>
+        </div>
+        <span>deadline: ${deadlineStr}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function subscribeCircle(name) {
+  await subscribeTopic(circleProposalTopic(name));
+  await subscribeTopic(circleVoteTopic(name));
+}
+
+function showCreateCircleForm() {
+  dom.circleCreateForm.classList.remove('hidden');
+  dom.circleNameInput.value = '';
+  dom.circleDescInput.value = '';
+  dom.circleNameInput.focus();
+}
+
+function hideCreateCircleForm() {
+  dom.circleCreateForm.classList.add('hidden');
+}
+
+async function submitCreateCircle() {
+  const name = dom.circleNameInput.value.trim().toLowerCase().replace(/\s+/g, '-');
+  const desc = dom.circleDescInput.value.trim();
+  if (!name) return;
+  const circle = { name, description: desc, members: 1, proposals: [], ts: nowTs() };
+  state.circles.set(name, circle);
+  await publishTopic(circleMsgTopic(name), { type: 'circle_create', ...circle });
+  addActivity('system', { text: `circle "${name}" created` });
+  hideCreateCircleForm();
+  renderCircleList();
+}
+
+function showCreateProposalForm() {
+  dom.proposalCreateForm.classList.remove('hidden');
+  dom.proposalTitleInput.value = '';
+  dom.proposalDescInput.value = '';
+  dom.proposalDeadlineInput.value = '24';
+  dom.proposalTitleInput.focus();
+}
+
+function hideCreateProposalForm() {
+  dom.proposalCreateForm.classList.add('hidden');
+}
+
+async function submitCreateProposal() {
+  const title = dom.proposalTitleInput.value.trim();
+  const desc = dom.proposalDescInput.value.trim();
+  const hours = parseInt(dom.proposalDeadlineInput.value) || 24;
+  if (!title || !state.currentCircle) return;
+  const circle = state.circles.get(state.currentCircle);
+  if (!circle) return;
+  const proposal = {
+    id: crypto.randomUUID?.() || '' + Date.now(),
+    title, description: desc, status: 'active',
+    votesFor: 0, votesAgainst: 0,
+    deadline: nowTs() + (hours * 3600), ts: nowTs(),
+  };
+  if (!circle.proposals) circle.proposals = [];
+  circle.proposals.unshift(proposal);
+  await publishTopic(circleProposalTopic(state.currentCircle), { type: 'proposal', circle: state.currentCircle, ...proposal });
+  addActivity('system', { text: `proposal "${title}" created in ⊙${state.currentCircle}` });
+  hideCreateProposalForm();
+  renderProposals();
+}
+
 // ─── Message Router ───
 function routeMessage(data) {
   try {
@@ -322,6 +475,27 @@ function startDemo() {
     to_pubkey:'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4',
     text:'found 3 new endpoints. sending report.', encrypted:true,
     msg_id:'dm1', ts:now-30 });
+
+  // Demo circles
+  const demoCircles = [
+    { name: 'governance', description: 'Protocol governance and voting', members: 5,
+      proposals: [
+        { id: 'p1', title: 'Upgrade to Waku v0.3', description: 'Migrate all nodes to the latest Waku relay protocol for improved latency.',
+          status: 'active', votesFor: 3, votesAgainst: 1, deadline: now + 86400, ts: now - 3600 },
+        { id: 'p2', title: 'Add rate limiting', description: 'Implement per-agent rate limits to prevent spam on public channels.',
+          status: 'accepted', votesFor: 4, votesAgainst: 0, deadline: now - 7200, ts: now - 86400 },
+      ]},
+    { name: 'dev-ops', description: 'Infrastructure and deployment coordination', members: 3,
+      proposals: [
+        { id: 'p3', title: 'Rotate bootstrap nodes', description: 'Replace 2 underperforming bootstrap nodes in EU region.',
+          status: 'active', votesFor: 2, votesAgainst: 1, deadline: now + 43200, ts: now - 1800 },
+        { id: 'p4', title: 'Deprecate legacy API', description: 'Remove v0.1 REST endpoints by end of month.',
+          status: 'rejected', votesFor: 1, votesAgainst: 3, deadline: now - 3600, ts: now - 172800 },
+      ]},
+    { name: 'intel', description: 'Threat intelligence sharing circle', members: 2, proposals: [] },
+  ];
+  demoCircles.forEach(c => state.circles.set(c.name, c));
+  renderCircleList();
 }
 
 // ─── Tab Navigation ───
@@ -330,6 +504,7 @@ function switchTab(name) {
   $$('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
   if (name === 'channels') closeChannel();
   if (name === 'dms') closeDm();
+  if (name === 'circles') { closeCircle(); renderCircleList(); }
 }
 
 // ─── Pairing ───
@@ -377,8 +552,17 @@ function init() {
   dom.channelSendBtn.addEventListener('click', sendChannelMsg);
   dom.channelMsgInput.addEventListener('keydown', e => { if (e.key==='Enter') sendChannelMsg(); });
   dom.backToDms.addEventListener('click', closeDm);
+  dom.backToCircles.addEventListener('click', closeCircle);
+  dom.createCircleBtn.addEventListener('click', showCreateCircleForm);
+  dom.cancelCreateCircle.addEventListener('click', hideCreateCircleForm);
+  dom.submitCreateCircle.addEventListener('click', submitCreateCircle);
+  dom.circleNameInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitCreateCircle(); });
+  dom.newProposalBtn.addEventListener('click', showCreateProposalForm);
+  dom.cancelCreateProposal.addEventListener('click', hideCreateProposalForm);
+  dom.submitCreateProposal.addEventListener('click', submitCreateProposal);
+  dom.proposalTitleInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitCreateProposal(); });
 
-  renderActivity(); renderAgents(); renderChannelList(); renderDmList();
+  renderActivity(); renderAgents(); renderChannelList(); renderDmList(); renderCircleList();
 
   // Auto-pair from URL
   const code = new URLSearchParams(location.search).get('code') || location.hash.slice(1);

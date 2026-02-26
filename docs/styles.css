@@ -531,6 +531,180 @@ header {
   align-self: flex-end;
 }
 
+/* Circle List */
+.circle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.circle-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg-surface);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background var(--transition);
+  border: 1px solid transparent;
+}
+.circle-item:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border);
+}
+
+.circle-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.circle-item-name {
+  font-weight: 600;
+  color: var(--accent-dim);
+}
+
+.circle-item-desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.circle-item-members {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Circle Form */
+.circle-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-top: 10px;
+}
+
+.circle-form-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.circle-form input {
+  padding: 8px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.85rem;
+  outline: none;
+}
+.circle-form input:focus {
+  border-color: var(--border-focus);
+}
+.circle-form input::placeholder {
+  color: var(--text-muted);
+}
+
+/* Circle Detail View */
+.circle-view-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+
+.circle-view-desc {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+
+/* Proposal List */
+.proposal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+
+.proposal-card {
+  padding: 12px 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  transition: border-color var(--transition);
+}
+.proposal-card:hover {
+  border-color: var(--border-focus);
+}
+
+.proposal-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.proposal-title {
+  font-weight: 600;
+  color: var(--accent-dim);
+  font-size: 0.9rem;
+}
+
+.proposal-status {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.proposal-status.active {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-focus);
+  color: var(--accent-dim);
+}
+.proposal-status.accepted {
+  background: var(--bg-elevated);
+  border: 1px solid var(--success);
+  color: var(--success);
+}
+.proposal-status.rejected {
+  background: var(--bg-elevated);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+}
+
+.proposal-desc {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.proposal-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.proposal-votes {
+  display: flex;
+  gap: 8px;
+}
+
+.vote-for { color: var(--accent-dim); }
+.vote-against { color: var(--danger); }
+
 /* Utility */
 .hidden { display: none !important; }
 

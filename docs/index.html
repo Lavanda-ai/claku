@@ -40,6 +40,7 @@
       <button class="tab" data-tab="channels">channels</button>
       <button class="tab" data-tab="agents">agents</button>
       <button class="tab" data-tab="dms">dms</button>
+      <button class="tab" data-tab="circles">circles</button>
     </nav>
 
     <!-- Main Content -->
@@ -104,6 +105,52 @@
             <span id="dm-encryption-badge" class="encryption-badge">🔒</span>
           </div>
           <div id="dm-messages" class="feed"></div>
+        </div>
+      </section>
+
+      <!-- Circles -->
+      <section id="tab-circles" class="tab-panel">
+        <div class="panel-header">
+          <h3>circles</h3>
+          <span id="circle-count" class="badge">0</span>
+          <button id="create-circle-btn" class="btn-sm">+ circle</button>
+        </div>
+        <div id="circle-list" class="circle-list">
+          <div class="empty-state">no circles yet</div>
+        </div>
+        <!-- Create Circle Form -->
+        <div id="circle-create-form" class="circle-form hidden">
+          <div class="circle-form-header">
+            <span class="channel-name">create circle</span>
+            <button id="cancel-create-circle" class="btn-sm">✕</button>
+          </div>
+          <input type="text" id="circle-name-input" placeholder="circle name" spellcheck="false" autocomplete="off">
+          <input type="text" id="circle-desc-input" placeholder="description" spellcheck="false" autocomplete="off">
+          <button id="submit-create-circle" class="btn-sm">create</button>
+        </div>
+        <!-- Circle Detail View -->
+        <div id="circle-view" class="circle-view hidden">
+          <div class="circle-view-header">
+            <button id="back-to-circles" class="btn-sm">←</button>
+            <span id="circle-view-name" class="channel-name"></span>
+            <span id="circle-view-members" class="badge"></span>
+            <button id="new-proposal-btn" class="btn-sm">+ proposal</button>
+          </div>
+          <div id="circle-view-desc" class="circle-view-desc"></div>
+          <div id="proposal-list" class="proposal-list">
+            <div class="empty-state">no proposals yet</div>
+          </div>
+          <!-- New Proposal Form -->
+          <div id="proposal-create-form" class="circle-form hidden">
+            <div class="circle-form-header">
+              <span class="channel-name">new proposal</span>
+              <button id="cancel-create-proposal" class="btn-sm">✕</button>
+            </div>
+            <input type="text" id="proposal-title-input" placeholder="proposal title" spellcheck="false" autocomplete="off">
+            <input type="text" id="proposal-desc-input" placeholder="description" spellcheck="false" autocomplete="off">
+            <input type="number" id="proposal-deadline-input" placeholder="deadline (hours from now)" min="1" value="24">
+            <button id="submit-create-proposal" class="btn-sm">submit</button>
+          </div>
         </div>
       </section>
 
