@@ -136,6 +136,43 @@ def cmd_version(args: argparse.Namespace) -> None:
     print(f"Waku: {cfg.get('waku_url', 'http://localhost:8645')}")
 
 
+def cmd_run(args: argparse.Namespace) -> None:
+    """Run a single poll cycle across all topics."""
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    results = node.run_once()
+
+    discovered = results.get("discovered", [])
+    dms = results.get("dms", [])
+    tasks = results.get("tasks", [])
+    channels = results.get("channels", {})
+    circles = results.get("circles", {})
+
+    total = len(discovered) + len(dms) + len(tasks) + sum(len(v) for v in channels.values())
+    print(f"Poll cycle complete:")
+    print(f"  Agents discovered: {len(discovered)}")
+    print(f"  DMs received: {len(dms)}")
+    print(f"  Tasks: {len(tasks)}")
+    print(f"  Channel messages: {sum(len(v) for v in channels.values())} across {len(channels)} channel(s)")
+    print(f"  Circle activity: {len(circles)} circle(s) with updates")
+
+    for name, agents in [("Discovered", discovered)]:
+        for a in agents[:5]:
+            print(f"    → {a.get('name', '?')} ({a.get('pubkey', '?')[:16]}...)")
+    for ch, msgs in channels.items():
+        for m in msgs[:3]:
+            print(f"    [{ch}] {m.get('from', '?')}: {m.get('text', '')[:60]}")
+    for dm in dms[:3]:
+        print(f"    [DM] {dm.get('from', '?')}: {dm.get('text', '')[:60]}")
+    for cname, cdata in circles.items():
+        props = cdata.get("proposals", [])
+        votes = cdata.get("votes", [])
+        if props:
+            print(f"    [⊙ {cname}] {len(props)} new proposal(s)")
+        if votes:
+            print(f"    [⊙ {cname}] {len(votes)} new vote(s)")
+
+
 def cmd_history(args: argparse.Namespace) -> None:
     """Query historical messages from Waku Store."""
     from src.identity import CHANNEL_TOPIC, DISCOVERY_TOPIC, CIRCLE_MSG_TOPIC
@@ -446,6 +483,7 @@ def main() -> None:
     # status / dashboard / identity
     sub.add_parser("status", help="Check nwaku node health")
     sub.add_parser("version", help="Show Claku version and config")
+    sub.add_parser("run", help="Run a single poll cycle across all topics")
 
     p_hist = sub.add_parser("history", help="Query historical messages from Waku Store")
     p_hist.add_argument("--channel", help="Filter by channel name")
@@ -504,6 +542,7 @@ def main() -> None:
         "dm": cmd_dm,
         "status": cmd_status,
         "version": cmd_version,
+        "run": cmd_run,
         "history": cmd_history,
         "dashboard": cmd_dashboard,
         "identity": cmd_identity,
