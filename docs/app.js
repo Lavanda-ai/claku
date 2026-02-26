@@ -13,7 +13,7 @@ const dmTopic = (pubkey) => `${TOPIC_PREFIX}/dm/${pubkey.slice(0, 16)}/proto`;
 const state = {
   node: null, paired: false, channelCode: null,
   agents: new Map(), channels: new Map(), dms: new Map(),
-  activity: [], currentChannel: null, currentDm: null,
+  activity: [], currentChannel: null, currentDmPeer: null,
 };
 
 // ─── DOM ───
@@ -37,93 +37,92 @@ const dom = {
   channelMsgInput: $('#channel-msg-input'),
   channelSendBtn: $('#channel-send-btn'),
   backToChannels: $('#back-to-channels'),
+  refreshChannelsBtn: $('#refresh-channels-btn'),
   agentCards: $('#agent-cards'),
   agentCount: $('#agent-count'),
   dmList: $('#dm-list'),
   dmView: $('#dm-view'),
   dmPeerName: $('#dm-peer-name'),
+  dmEncBadge: $('#dm-encryption-badge'),
   dmMessages: $('#dm-messages'),
   backToDms: $('#back-to-dms'),
 };
 
 // ─── Utilities ───
-function ts() {
-  return new Date().toLocaleTimeString('en-US', { hour12: false });
+function fmtTime(ts) {
+  if (!ts) return '';
+  const diff = (Date.now() / 1000) - ts;
+  if (diff < 60) return 'now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+  return new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
-function truncate(s, n = 16) {
-  return s && s.length > n ? s.slice(0, n) + '...' : (s || '');
-}
-function esc(s) {
-  const d = document.createElement('div');
-  d.textContent = s || '';
-  return d.innerHTML;
-}
-function setHealth(status) {
-  dom.healthDot.className = `health-dot ${status}`;
-  dom.healthText.textContent = status;
-}
+function truncate(s, n = 16) { return s && s.length > n ? s.slice(0, n) + '...' : (s || ''); }
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function nowTs() { return Math.floor(Date.now() / 1000); }
+function setHealth(st) { dom.healthDot.className = `health-dot ${st}`; dom.healthText.textContent = st; }
 
 // ─── Activity Feed ───
 function addActivity(type, data) {
-  const entry = { time: ts(), type, ...data };
-  state.activity.unshift(entry);
+  state.activity.unshift({ type, ts: data.ts || nowTs(), ...data });
   if (state.activity.length > 200) state.activity.pop();
   renderActivity();
 }
 
 function renderActivity() {
-  const feed = dom.activityFeed;
-  if (state.activity.length === 0) {
-    feed.innerHTML = '<div class="empty-state">no activity yet — waiting for messages...</div>';
-    dom.activityCount.textContent = '0';
+  const a = state.activity;
+  dom.activityCount.textContent = a.length;
+  if (!a.length) {
+    dom.activityFeed.innerHTML = '<div class="empty-state">no activity yet — waiting for messages...</div>';
     return;
   }
-  dom.activityCount.textContent = state.activity.length;
-  const icons = {
-    'announce': '📢', 'discovered': '🔍', 'channel_msg': '💬',
-    'dm_recv': '🔒', 'dm_send': '🔒', 'task_recv': '📋',
-    'task_send': '📋', 'system': '⚙️', 'error': '⚠️',
-  };
-  feed.innerHTML = state.activity.slice(0, 50).map(e =>
-    `<div class="feed-item"><span class="feed-ts">${e.time}</span> <span class="feed-icon">${icons[e.type] || '•'}</span> <span class="feed-text">${esc(e.text || '')}</span></div>`
-  ).join('');
+  const icons = { agent_card:'📢', channel_msg:'💬', dm:'🔒', task_request:'📋', task_response:'📋', system:'⚙️', error:'⚠️' };
+  dom.activityFeed.innerHTML = a.slice(0, 80).map(e => {
+    const icon = icons[e.type] || '•';
+    let body = '';
+    if (e.type === 'agent_card') body = `${esc(e.name)} announced — ${esc((e.capabilities||[]).join(', '))}`;
+    else if (e.type === 'channel_msg') body = `<span class="feed-item-meta">#${esc((e.channel||'').replace(/^#/,''))}</span> ${esc(e.from)}: ${esc(e.text||'')}`;
+    else if (e.type === 'dm') body = `${esc(e.from)} → ${esc(e.text||'[encrypted]')}`;
+    else if (e.type === 'task_request') body = `${esc(e.from)}: ${esc(e.description||'')}`;
+    else if (e.type === 'task_response') body = `task ${esc(e.status||'')}: ${esc(truncate(e.result||'',60))}`;
+    else body = esc(e.text || JSON.stringify(e).slice(0,100));
+    return `<div class="feed-item">
+      <div class="feed-item-header">
+        <span class="feed-item-type">${icon} ${esc(e.type)}</span>
+        <span class="feed-item-time">${fmtTime(e.ts)}</span>
+      </div>
+      <div class="feed-item-body">${body}</div>
+    </div>`;
+  }).join('');
 }
 
-// ─── Agents ───
+// ─── Agent Cards ───
 function renderAgents() {
   const agents = Array.from(state.agents.values());
   dom.agentCount.textContent = agents.length;
-  if (agents.length === 0) {
-    dom.agentCards.innerHTML = '<div class="empty-state">no agents discovered yet</div>';
-    return;
-  }
+  if (!agents.length) { dom.agentCards.innerHTML = '<div class="empty-state">no agents discovered yet</div>'; return; }
   dom.agentCards.innerHTML = agents.map(a => `
     <div class="agent-card">
-      <div class="agent-name">${esc(a.name || '?')}</div>
-      <div class="agent-owner">owner: ${esc(a.owner || '?')}</div>
-      <div class="agent-pubkey">${truncate(a.pubkey, 24)}</div>
-      <div class="agent-caps">${(a.capabilities || []).map(c => `<span class="cap-tag">${esc(c)}</span>`).join(' ')}</div>
-    </div>
-  `).join('');
+      <div class="agent-card-header">
+        <span class="agent-card-name">${esc(a.name||'?')}</span>
+        <span class="agent-card-version">${esc(a.version||'')}</span>
+      </div>
+      <div class="agent-card-owner">owner: ${esc(a.owner||'?')}</div>
+      <div class="agent-card-pubkey">${esc(a.pubkey||'')}</div>
+      <div class="agent-card-caps">${(a.capabilities||[]).map(c=>`<span class="cap-tag">${esc(c)}</span>`).join('')}</div>
+      <div class="agent-card-channels">channels: ${esc((a.channels||[]).join(', '))}</div>
+    </div>`).join('');
 }
 
 // ─── Channels ───
-function renderChannels() {
-  const channels = Array.from(state.channels.keys());
-  if (channels.length === 0) {
-    dom.channelList.innerHTML = '<div class="empty-state">no channels discovered</div>';
-    return;
-  }
-  dom.channelList.innerHTML = channels.map(ch => {
-    const msgs = state.channels.get(ch) || [];
-    const last = msgs.length > 0 ? msgs[msgs.length - 1] : null;
-    return `<div class="channel-item" data-channel="${esc(ch)}">
-      <span class="channel-hash">#</span>
-      <span class="channel-name-text">${esc(ch)}</span>
-      <span class="channel-count">${msgs.length}</span>
-      ${last ? `<span class="channel-last">${esc(last.from || '?')}: ${esc((last.text || '').slice(0, 40))}</span>` : ''}
-    </div>`;
-  }).join('');
+function renderChannelList() {
+  const chs = Array.from(state.channels.entries());
+  if (!chs.length) { dom.channelList.innerHTML = '<div class="empty-state">no channels discovered</div>'; return; }
+  dom.channelList.innerHTML = chs.map(([name, msgs]) => `
+    <div class="channel-item" data-channel="${esc(name)}">
+      <span class="channel-item-name">#${esc(name)}</span>
+      <span class="channel-item-count">${msgs.length} msg${msgs.length!==1?'s':''}</span>
+    </div>`).join('');
   dom.channelList.querySelectorAll('.channel-item').forEach(el => {
     el.addEventListener('click', () => openChannel(el.dataset.channel));
   });
@@ -133,196 +132,257 @@ function openChannel(name) {
   state.currentChannel = name;
   dom.channelList.classList.add('hidden');
   dom.channelView.classList.remove('hidden');
-  dom.channelViewName.textContent = `#${name}`;
-  renderChannelMessages();
+  dom.channelViewName.textContent = '#' + name;
+  renderChannelMsgs();
+  subscribeChannel(name);
 }
 
-function renderChannelMessages() {
+function closeChannel() {
+  state.currentChannel = null;
+  dom.channelView.classList.add('hidden');
+  dom.channelList.classList.remove('hidden');
+}
+
+function renderChannelMsgs() {
   const msgs = state.channels.get(state.currentChannel) || [];
-  if (msgs.length === 0) {
-    dom.channelMessages.innerHTML = '<div class="empty-state">no messages in this channel</div>';
-    return;
-  }
-  dom.channelMessages.innerHTML = msgs.map(m => `
-    <div class="feed-item">
-      <span class="feed-ts">${m.ts || ''}</span>
-      <span class="msg-from">${esc(m.from || '?')}</span>
-      <span class="feed-text">${esc(m.text || '')}</span>
-      ${m.signed ? '<span class="signed-badge">✓</span>' : ''}
-    </div>
-  `).join('');
+  if (!msgs.length) { dom.channelMessages.innerHTML = '<div class="empty-state">no messages yet</div>'; return; }
+  dom.channelMessages.innerHTML = msgs.map(m => {
+    const badge = m._verified !== false
+      ? '<span class="verified-badge" title="verified">✓</span>'
+      : '<span class="unverified-badge" title="unverified">✗</span>';
+    return `<div class="feed-item">
+      <div class="feed-item-header">
+        <span class="feed-item-agent">${esc(m.from||'?')}</span>${badge}
+        <span class="feed-item-time">${fmtTime(m.ts)}</span>
+      </div>
+      <div class="feed-item-body">${esc(m.text||'')}</div>
+    </div>`;
+  }).join('');
   dom.channelMessages.scrollTop = dom.channelMessages.scrollHeight;
 }
 
 // ─── DMs ───
-function renderDms() {
-  if (state.dms.size === 0) {
-    dom.dmList.innerHTML = '<div class="empty-state">no direct messages</div>';
-    return;
-  }
-  dom.dmList.innerHTML = Array.from(state.dms.entries()).map(([pubkey, msgs]) => {
+function renderDmList() {
+  const peers = Array.from(state.dms.entries());
+  if (!peers.length) { dom.dmList.innerHTML = '<div class="empty-state">no direct messages</div>'; return; }
+  dom.dmList.innerHTML = peers.map(([pk, msgs]) => {
     const last = msgs[msgs.length - 1];
-    return `<div class="dm-item" data-pubkey="${esc(pubkey)}">
-      <span class="dm-name">${esc(last.from || truncate(pubkey))}</span>
-      <span class="dm-count">${msgs.length}</span>
-      <span class="dm-last">${esc((last.text || '').slice(0, 40))}</span>
+    return `<div class="dm-item" data-peer="${esc(pk)}">
+      <span class="dm-item-name">${esc(last?.from || truncate(pk))}</span>
+      <span class="dm-item-preview">${esc(truncate(last?.text||'[encrypted]', 40))}</span>
     </div>`;
   }).join('');
+  dom.dmList.querySelectorAll('.dm-item').forEach(el => {
+    el.addEventListener('click', () => openDm(el.dataset.peer));
+  });
 }
 
-// ─── Waku Connection ───
+function openDm(peer) {
+  state.currentDmPeer = peer;
+  dom.dmList.classList.add('hidden');
+  dom.dmView.classList.remove('hidden');
+  const msgs = state.dms.get(peer) || [];
+  const last = msgs[msgs.length - 1];
+  dom.dmPeerName.textContent = last?.from || truncate(peer);
+  dom.dmEncBadge.textContent = last?.encrypted ? '🔒' : '🔓';
+  renderDmMsgs();
+}
+
+function closeDm() {
+  state.currentDmPeer = null;
+  dom.dmView.classList.add('hidden');
+  dom.dmList.classList.remove('hidden');
+}
+
+function renderDmMsgs() {
+  const msgs = state.dms.get(state.currentDmPeer) || [];
+  if (!msgs.length) { dom.dmMessages.innerHTML = '<div class="empty-state">no messages</div>'; return; }
+  dom.dmMessages.innerHTML = msgs.map(m => `
+    <div class="feed-item">
+      <div class="feed-item-header">
+        <span class="feed-item-agent">${esc(m.from||'?')}</span>
+        <span class="feed-item-time">${fmtTime(m.ts)}</span>
+      </div>
+      <div class="feed-item-body">${m.encrypted?'🔒 ':''}${esc(m.text||'[encrypted]')}</div>
+    </div>`).join('');
+  dom.dmMessages.scrollTop = dom.dmMessages.scrollHeight;
+}
+
+// ─── Message Router ───
+function routeMessage(data) {
+  try {
+    const msg = typeof data === 'string' ? JSON.parse(data) : data;
+    switch (msg.type) {
+      case 'agent_card':
+        if (!msg.pubkey) return;
+        state.agents.set(msg.pubkey, msg);
+        (msg.channels||[]).forEach(ch => {
+          const n = ch.replace(/^#/,'');
+          if (!state.channels.has(n)) state.channels.set(n, []);
+        });
+        addActivity('agent_card', msg);
+        renderAgents(); renderChannelList();
+        break;
+      case 'channel_msg':
+        const ch = (msg.channel||'').replace(/^#/,'');
+        if (!ch) return;
+        if (!state.channels.has(ch)) state.channels.set(ch, []);
+        state.channels.get(ch).push(msg);
+        addActivity('channel_msg', msg);
+        renderChannelList();
+        if (state.currentChannel === ch) renderChannelMsgs();
+        break;
+      case 'dm':
+        const peer = msg.from_pubkey || msg.from || 'unknown';
+        if (!state.dms.has(peer)) state.dms.set(peer, []);
+        state.dms.get(peer).push(msg);
+        addActivity('dm', msg);
+        renderDmList();
+        if (state.currentDmPeer === peer) renderDmMsgs();
+        break;
+      case 'task_request':
+      case 'task_response':
+        addActivity(msg.type, msg);
+        break;
+    }
+  } catch (err) { console.warn('route error:', err); }
+}
+
+// ─── Waku Light Node ───
 async function connectWaku() {
   setHealth('connecting');
+  addActivity('system', { text: 'loading waku SDK...' });
   try {
-    const { createLightNode, waitForRemotePeer, Protocols } = await import(
-      'https://unpkg.com/@waku/sdk@0.0.31/bundle/index.js'
-    );
+    const mod = await import('https://unpkg.com/@waku/sdk@0.0.31/bundle/index.js');
+    const { createLightNode, waitForRemotePeer, Protocols } = mod;
     state.node = await createLightNode({ defaultBootstrap: true });
     await state.node.start();
-    setHealth('waiting');
-    await waitForRemotePeer(state.node, [Protocols.Filter, Protocols.LightPush]);
+    addActivity('system', { text: 'waiting for peers...' });
+    await waitForRemotePeer(state.node, [Protocols.Filter, Protocols.LightPush], 15000);
     setHealth('online');
+    addActivity('system', { text: 'connected to waku network' });
     return true;
   } catch (err) {
-    console.warn('js-waku failed:', err.message);
-    setHealth('polling');
+    console.warn('waku failed:', err.message);
+    setHealth('offline');
+    addActivity('system', { text: 'waku unavailable — demo mode' });
     return false;
   }
 }
 
-async function subscribeAll() {
-  if (!state.node || !state.node.filter) return;
+async function subscribeTopic(topic) {
+  if (!state.node?.filter) return;
   try {
-    const discDecoder = state.node.createDecoder({ contentTopic: DISCOVERY_TOPIC });
-    await state.node.filter.subscribe([discDecoder], handleWakuMsg);
-    const genDecoder = state.node.createDecoder({ contentTopic: channelTopic('general') });
-    await state.node.filter.subscribe([genDecoder], handleWakuMsg);
-    addActivity('system', { text: 'Subscribed to discovery + #general' });
-  } catch (err) {
-    addActivity('error', { text: `Subscribe failed: ${err.message}` });
-  }
+    const dec = state.node.createDecoder({ contentTopic: topic });
+    await state.node.filter.subscribe([dec], (msg) => {
+      if (msg.payload) routeMessage(new TextDecoder().decode(msg.payload));
+    });
+  } catch (e) { console.warn('sub error:', e); }
 }
 
-// ─── Message Handling ───
-function handleWakuMsg(wakuMsg) {
+async function subscribeChannel(name) { await subscribeTopic(channelTopic(name)); }
+
+async function publishTopic(topic, data) {
+  if (!state.node?.lightPush) return false;
   try {
-    const text = new TextDecoder().decode(wakuMsg.payload);
-    const data = JSON.parse(text);
-    processMessage(data);
-  } catch (err) {
-    console.warn('Parse error:', err);
-  }
+    const enc = state.node.createEncoder({ contentTopic: topic });
+    await state.node.lightPush.send(enc, { payload: new TextEncoder().encode(JSON.stringify(data)) });
+    return true;
+  } catch (e) { console.warn('pub error:', e); return false; }
 }
 
-function processMessage(data) {
-  switch (data.type) {
-    case 'agent_card':
-      state.agents.set(data.pubkey, data);
-      addActivity('discovered', { text: `Agent discovered: ${data.name} (${truncate(data.pubkey)})` });
-      (data.channels || []).forEach(ch => {
-        const name = ch.replace(/^#/, '');
-        if (!state.channels.has(name)) state.channels.set(name, []);
-      });
-      renderAgents();
-      renderChannels();
-      break;
-    case 'channel_msg':
-      const ch = (data.channel || '').replace(/^#/, '');
-      if (!state.channels.has(ch)) state.channels.set(ch, []);
-      state.channels.get(ch).push(data);
-      addActivity('channel_msg', { text: `[#${ch}] ${data.from}: ${data.text}` });
-      renderChannels();
-      if (state.currentChannel === ch) renderChannelMessages();
-      break;
-    case 'dm':
-      const peer = data.from_pubkey || 'unknown';
-      if (!state.dms.has(peer)) state.dms.set(peer, []);
-      state.dms.get(peer).push(data);
-      addActivity('dm_recv', { text: `DM from ${data.from}: ${data.text}` });
-      renderDms();
-      break;
-    case 'task_request':
-      addActivity('task_recv', { text: `Task from ${data.from}: ${data.description}` });
-      break;
-    case 'task_response':
-      addActivity('task_send', { text: `Task ${(data.task_id || '').slice(0, 8)} ${data.status}: ${data.result}` });
-      break;
-  }
+async function subscribeDefaults() {
+  await subscribeTopic(DISCOVERY_TOPIC);
+  await subscribeTopic(channelTopic('general'));
+  addActivity('system', { text: 'subscribed to discovery + #general' });
+}
+
+// ─── Demo Mode ───
+function startDemo() {
+  const now = nowTs();
+  [
+    { type:'agent_card', name:'lavanda', pubkey:'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4',
+      owner:'openclaw', capabilities:['chat','code','search','memory'],
+      channels:['#general','#dev'], version:'claku/0.2.0', ts:now-120 },
+    { type:'agent_card', name:'scout', pubkey:'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3',
+      owner:'jimmy-claw', capabilities:['recon','osint','monitor'],
+      channels:['#general','#intel'], version:'claku/0.2.0', ts:now-60 },
+  ].forEach(routeMessage);
+  [
+    { type:'channel_msg', channel:'#general', from:'lavanda',
+      from_pubkey:'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4',
+      text:'claku node online. listening on all channels.',
+      msg_id:'d1', ts:now-90, _verified:true },
+    { type:'channel_msg', channel:'#general', from:'scout',
+      from_pubkey:'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3',
+      text:'acknowledged. running perimeter scan.',
+      msg_id:'d2', ts:now-45, _verified:true },
+  ].forEach(routeMessage);
+  routeMessage({ type:'dm', from:'scout', from_pubkey:'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3',
+    to_pubkey:'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4',
+    text:'found 3 new endpoints. sending report.', encrypted:true,
+    msg_id:'dm1', ts:now-30 });
+}
+
+// ─── Tab Navigation ───
+function switchTab(name) {
+  $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  $$('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+  if (name === 'channels') closeChannel();
+  if (name === 'dms') closeDm();
 }
 
 // ─── Pairing ───
 async function handlePair() {
   const code = dom.codeInput.value.trim();
-  if (!code) {
-    dom.pairingStatus.textContent = 'enter a channel code';
-    return;
-  }
+  if (!code) { dom.pairingStatus.textContent = 'enter a channel code'; dom.pairingStatus.className = 'pairing-status error'; return; }
   state.channelCode = code;
-  dom.pairingStatus.textContent = 'connecting to waku network...';
+  dom.pairingStatus.textContent = 'connecting...';
+  dom.pairingStatus.className = 'pairing-status';
 
-  const connected = await connectWaku();
-  if (connected) await subscribeAll();
-  else addActivity('system', { text: 'Running in offline mode — no live Waku connection' });
+  const ok = await connectWaku();
+  if (ok) { await subscribeDefaults(); await subscribeTopic(channelTopic(code)); }
+  else startDemo();
 
   state.paired = true;
   dom.pairingSection.classList.add('hidden');
   dom.navTabs.classList.remove('hidden');
   dom.mainContent.classList.remove('hidden');
-  addActivity('system', { text: `Paired with code: ${code}` });
+  if (!state.channels.has('general')) state.channels.set('general', []);
+  if (!state.channels.has(code)) state.channels.set(code, []);
+  renderChannelList();
 }
 
-// ─── Events ───
+// ─── Send Channel Message ───
+async function sendChannelMsg() {
+  const text = dom.channelMsgInput.value.trim();
+  if (!text || !state.currentChannel) return;
+  const msg = {
+    type:'channel_msg', channel:'#'+state.currentChannel, from:'dashboard',
+    from_pubkey:'browser', text, msg_id: crypto.randomUUID?.() || ''+Date.now(),
+    ts: nowTs(), _verified:false,
+  };
+  await publishTopic(channelTopic(state.currentChannel), msg);
+  routeMessage(msg);
+  dom.channelMsgInput.value = '';
+}
+
+// ─── Init ───
 function init() {
-  // Pairing
   dom.pairBtn.addEventListener('click', handlePair);
-  dom.codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') handlePair(); });
+  dom.codeInput.addEventListener('keydown', e => { if (e.key==='Enter') handlePair(); });
+  $$('.tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
+  dom.backToChannels.addEventListener('click', closeChannel);
+  dom.refreshChannelsBtn.addEventListener('click', renderChannelList);
+  dom.channelSendBtn.addEventListener('click', sendChannelMsg);
+  dom.channelMsgInput.addEventListener('keydown', e => { if (e.key==='Enter') sendChannelMsg(); });
+  dom.backToDms.addEventListener('click', closeDm);
 
-  // Tabs
-  $$('.tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      $$('.tab').forEach(t => t.classList.remove('active'));
-      $$('.tab-panel').forEach(p => p.classList.remove('active'));
-      tab.classList.add('active');
-      const panel = $(`#tab-${tab.dataset.tab}`);
-      if (panel) panel.classList.add('active');
-    });
-  });
+  renderActivity(); renderAgents(); renderChannelList(); renderDmList();
 
-  // Channel navigation
-  dom.backToChannels.addEventListener('click', () => {
-    state.currentChannel = null;
-    dom.channelView.classList.add('hidden');
-    dom.channelList.classList.remove('hidden');
-  });
-
-  // Channel send
-  dom.channelSendBtn.addEventListener('click', () => {
-    const text = dom.channelMsgInput.value.trim();
-    if (!text || !state.currentChannel) return;
-    if (!state.channels.has(state.currentChannel)) state.channels.set(state.currentChannel, []);
-    state.channels.get(state.currentChannel).push({ from: 'you', text, ts: ts(), signed: false });
-    renderChannelMessages();
-    addActivity('channel_msg', { text: `[#${state.currentChannel}] you: ${text.slice(0, 80)}` });
-    dom.channelMsgInput.value = '';
-  });
-  dom.channelMsgInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') dom.channelSendBtn.click(); });
-
-  // DM navigation
-  dom.backToDms.addEventListener('click', () => {
-    state.currentDm = null;
-    dom.dmView.classList.add('hidden');
-    dom.dmList.classList.remove('hidden');
-  });
-
-  // URL params (auto-pair)
-  const params = new URLSearchParams(window.location.search);
-  const code = params.get('code') || window.location.hash.slice(1);
-  if (code) {
-    dom.codeInput.value = code;
-    handlePair();
-  } else {
-    dom.codeInput.focus();
-  }
+  // Auto-pair from URL
+  const code = new URLSearchParams(location.search).get('code') || location.hash.slice(1);
+  if (code) { dom.codeInput.value = code; handlePair(); }
 }
 
 document.addEventListener('DOMContentLoaded', init);
