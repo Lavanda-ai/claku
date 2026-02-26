@@ -25,10 +25,15 @@ class WakuTransport:
 
     Wraps publish, subscribe, and poll operations against a single nwaku node.
     All payloads are base64-encoded before transmission per the Waku REST spec.
+
+    Supports two modes:
+    - **static** (cluster 0): uses ``/relay/v1/`` with explicit pubsub topics
+    - **auto** (cluster 1+): uses ``/relay/v1/auto/`` with content-topic-based sharding
     """
 
-    def __init__(self, waku_url: str = "http://localhost:8645") -> None:
+    def __init__(self, waku_url: str = "http://localhost:8645", auto_sharding: bool = False) -> None:
         self.waku_url: str = waku_url.rstrip("/")
+        self.auto_sharding: bool = auto_sharding
 
     def _encode_topic(self, topic: str) -> str:
         """URL-encode a Waku topic for use in REST paths."""
@@ -90,22 +95,28 @@ class WakuTransport:
                 return {"status": status, "raw": body}
         return {"error": body, "status": status}
 
-    def subscribe(self, pubsub_topic: str = PUBSUB_TOPIC) -> bool:
-        """Subscribe to a pubsub topic for relay messages.
+    def subscribe(self, topic: str = PUBSUB_TOPIC) -> bool:
+        """Subscribe to a topic for relay messages.
 
-        Args:
-            pubsub_topic: The pubsub topic string. Defaults to cluster 0, shard 0.
+        In auto-sharding mode, *topic* is treated as a content topic and
+        subscribed via ``/relay/v1/auto/subscriptions``.  In static mode
+        it is a pubsub topic subscribed via ``/relay/v1/subscriptions``.
 
         Returns:
             ``True`` if the subscription succeeded.
         """
-        status, _ = self._request(
-            "POST", "/relay/v1/subscriptions", [pubsub_topic]
-        )
+        if self.auto_sharding:
+            path = "/relay/v1/auto/subscriptions"
+        else:
+            path = "/relay/v1/subscriptions"
+        status, _ = self._request("POST", path, [topic])
         return status == 200
 
     def publish(self, content_topic: str, payload: bytes) -> bool:
         """Publish a raw payload to a Waku content topic.
+
+        In auto-sharding mode, publishes via ``/relay/v1/auto/messages/``.
+        In static mode, publishes via ``/relay/v1/messages/{pubsub_topic}``.
 
         Args:
             content_topic: Waku content topic string.
@@ -123,21 +134,33 @@ class WakuTransport:
             "timestamp": now_ns,
         }
 
-        path = f"/relay/v1/messages/{self._encode_topic(PUBSUB_TOPIC)}"
+        if self.auto_sharding:
+            path = "/relay/v1/auto/messages"
+        else:
+            path = f"/relay/v1/messages/{self._encode_topic(PUBSUB_TOPIC)}"
         status, _ = self._request("POST", path, msg)
         return status == 200
 
     def poll(self, content_topic: Optional[str] = None) -> list[dict]:
         """Poll for raw messages from the relay subscription.
 
+        In auto-sharding mode, polls ``/relay/v1/auto/messages/{content_topic}``.
+        In static mode, polls ``/relay/v1/messages/{pubsub_topic}`` and filters
+        by content topic client-side.
+
         Args:
-            content_topic: If provided, only return messages matching this topic.
+            content_topic: Content topic to poll. Required in auto-sharding mode.
 
         Returns:
             List of dicts with keys ``content_topic``, ``payload`` (bytes),
             and ``timestamp``.
         """
-        path = f"/relay/v1/messages/{self._encode_topic(PUBSUB_TOPIC)}"
+        if self.auto_sharding:
+            if not content_topic:
+                return []
+            path = f"/relay/v1/auto/messages/{self._encode_topic(content_topic)}"
+        else:
+            path = f"/relay/v1/messages/{self._encode_topic(PUBSUB_TOPIC)}"
         status, body = self._request("GET", path)
 
         if status != 200:
