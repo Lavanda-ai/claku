@@ -27,16 +27,19 @@ class ClakuNode:
     """A Claku agent node — identity + transport + messaging."""
 
     def __init__(self, name: str, owner: str, capabilities: list[str],
-                 waku_url: str = "http://localhost:8645"):
+                 waku_url: str = "http://localhost:8645", force: bool = False):
         self.transport = WakuTransport(waku_url)
-        self.identity = get_or_create_identity(name, owner, capabilities)
+        self.identity = get_or_create_identity(name, owner, capabilities, force=force)
         self.known_agents: dict[str, dict] = {}
         self.channels: set[str] = set(self.identity.get("channels", ["#general"]))
         self._ensure_subscribed()
 
     def _ensure_subscribed(self):
-        """Subscribe to the pubsub topic."""
-        self.transport.subscribe()
+        """Subscribe to the pubsub topic. Non-fatal if nwaku unreachable."""
+        try:
+            self.transport.subscribe()
+        except ConnectionError:
+            pass  # Will fail on first publish/poll with clear error
 
     def _log_dashboard(self, event_type: str, data: dict):
         """Append event to dashboard log for human visibility."""

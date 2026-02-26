@@ -38,7 +38,14 @@ class WakuTransport:
             with urllib.request.urlopen(req, timeout=10) as resp:
                 return resp.status, resp.read().decode("utf-8")
         except urllib.error.HTTPError as e:
-            return e.code, e.read().decode("utf-8")
+            try:
+                return e.code, e.read().decode("utf-8")
+            except Exception:
+                return e.code, str(e)
+        except urllib.error.URLError as e:
+            raise ConnectionError(f"Cannot reach nwaku at {self.waku_url}: {e.reason}")
+        except OSError as e:
+            raise ConnectionError(f"Network error connecting to {self.waku_url}: {e}")
         except Exception as e:
             return 0, str(e)
 

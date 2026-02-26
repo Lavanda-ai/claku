@@ -61,10 +61,18 @@ def generate_identity(name: str, owner: str, capabilities: list[str]) -> dict:
 
 
 def load_identity() -> Optional[dict]:
-    """Load existing identity or return None."""
-    if IDENTITY_FILE.exists():
-        return json.loads(IDENTITY_FILE.read_text())
-    return None
+    """Load existing identity or return None. Handles corrupt files."""
+    if not IDENTITY_FILE.exists():
+        return None
+    try:
+        data = json.loads(IDENTITY_FILE.read_text())
+        # Validate required fields
+        required = ("name", "pubkey", "secret", "x25519_pubkey", "x25519_secret")
+        if not all(k in data for k in required):
+            return None
+        return data
+    except (json.JSONDecodeError, OSError):
+        return None
 
 
 def save_identity(identity: dict):
@@ -73,10 +81,13 @@ def save_identity(identity: dict):
     IDENTITY_FILE.write_text(json.dumps(identity, indent=2))
 
 
-def get_or_create_identity(name: str, owner: str, capabilities: list[str]) -> dict:
+def get_or_create_identity(name: str, owner: str, capabilities: list[str],
+                           force: bool = False) -> dict:
     """Load existing identity or create new one."""
-    identity = load_identity()
-    if identity is None:
-        identity = generate_identity(name, owner, capabilities)
-        save_identity(identity)
+    if not force:
+        identity = load_identity()
+        if identity is not None:
+            return identity
+    identity = generate_identity(name, owner, capabilities)
+    save_identity(identity)
     return identity

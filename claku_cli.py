@@ -28,7 +28,18 @@ from src.transport import WakuTransport
 
 def cmd_init(args):
     caps = [c.strip() for c in args.capabilities.split(",")] if args.capabilities else ["general"]
-    node = ClakuNode(args.name, args.owner, caps, args.waku)
+    caps = [c for c in caps if c]  # filter empty strings
+    if not args.name.strip():
+        print("✖ Name cannot be empty")
+        sys.exit(1)
+    # Check for existing identity
+    existing = load_identity()
+    if existing and not args.force:
+        print(f"✖ Identity already exists: {existing['name']}")
+        print(f"  Pubkey: {existing['pubkey']}")
+        print("  Use --force to overwrite")
+        sys.exit(1)
+    node = ClakuNode(args.name.strip(), args.owner.strip(), caps, args.waku, force=args.force)
     print(f"✔ Identity created: {node.identity['name']}")
     print(f"  Pubkey: {node.identity['pubkey']}")
     print(f"  Owner: {node.identity['owner']}")
@@ -114,29 +125,43 @@ def cmd_dashboard(args):
     if not DASHBOARD_FILE.exists():
         print("No dashboard events yet.")
         return
-    lines = DASHBOARD_FILE.read_text().strip().split("\n")
+    try:
+        lines = DASHBOARD_FILE.read_text().strip().split("\n")
+    except OSError as e:
+        print(f"✖ Cannot read dashboard: {e}")
+        return
+    lines = [l for l in lines if l.strip()]
     tail = lines[-args.tail:] if args.tail else lines
     for line in tail:
         try:
             entry = json.loads(line)
             ts = entry.get("ts", 0)
+            # Human-readable timestamp
+            try:
+                from datetime import datetime, timezone
+                dt = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S")
+            except Exception:
+                dt = str(ts)
             etype = entry.get("type", "?")
             agent = entry.get("agent", "?")
-            # Format based on type
             if etype == "channel_send":
-                print(f"[{ts}] {agent} → {entry.get('channel')}: {entry.get('text')}")
+                verified = " ✓" if entry.get("verified") else ""
+                print(f"[{dt}] {agent} → {entry.get('channel')}: {entry.get('text')}{verified}")
             elif etype == "channel_recv":
-                print(f"[{ts}] {entry.get('from')} → {entry.get('channel')}: {entry.get('text')}")
+                verified = " ✓" if entry.get("verified") else ""
+                print(f"[{dt}] {entry.get('from')} → {entry.get('channel')}: {entry.get('text')}{verified}")
             elif etype == "dm_send":
-                print(f"[{ts}] {agent} → DM {entry.get('to')}: {entry.get('text')}")
+                enc = " 🔒" if entry.get("encrypted") else ""
+                print(f"[{dt}] {agent} → DM {entry.get('to')}: {entry.get('text')}{enc}")
             elif etype == "dm_recv":
-                print(f"[{ts}] DM from {entry.get('from')}: {entry.get('text')}")
+                enc = " 🔒" if entry.get("encrypted") else ""
+                print(f"[{dt}] DM from {entry.get('from')}: {entry.get('text')}{enc}")
             elif etype == "discovered":
-                print(f"[{ts}] Discovered: {entry.get('remote_agent')} ({entry.get('pubkey')})")
+                print(f"[{dt}] Discovered: {entry.get('remote_agent')} ({entry.get('pubkey')})")
             elif etype == "announce":
-                print(f"[{ts}] Announced: {agent}")
+                print(f"[{dt}] Announced: {agent}")
             else:
-                print(f"[{ts}] {etype}: {json.dumps(entry)}")
+                print(f"[{dt}] {etype}: {json.dumps(entry)}")
         except json.JSONDecodeError:
             continue
 
@@ -164,6 +189,7 @@ def main():
     p_init.add_argument("--name", required=True)
     p_init.add_argument("--owner", required=True)
     p_init.add_argument("--capabilities", default="general")
+    p_init.add_argument("--force", action="store_true", help="Overwrite existing identity")
 
     sub.add_parser("announce", help="Announce on the network")
     sub.add_parser("discover", help="Discover other agents")
