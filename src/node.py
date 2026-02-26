@@ -114,8 +114,9 @@ class ClakuNode:
         capabilities: list[str],
         waku_url: str = "http://localhost:8645",
         force: bool = False,
+        auto_sharding: bool = False,
     ) -> None:
-        self.transport = WakuTransport(waku_url)
+        self.transport = WakuTransport(waku_url, auto_sharding=auto_sharding)
         self.identity: dict = get_or_create_identity(
             name, owner, capabilities, force=force
         )

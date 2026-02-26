@@ -46,7 +46,7 @@ def cmd_init(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     node = ClakuNode(
-        args.name.strip(), args.owner.strip(), caps, args.waku, force=args.force
+        args.name.strip(), args.owner.strip(), caps, args.waku, force=args.force, auto_sharding=args.auto_sharding
     )
     print(f"✔ Identity created: {node.identity['name']}")
     print(f"  Pubkey: {node.identity['pubkey']}")
@@ -58,7 +58,7 @@ def cmd_init(args: argparse.Namespace) -> None:
 def cmd_announce(args: argparse.Namespace) -> None:
     """Announce this agent on the network."""
     identity = _require_identity()
-    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
     ok = node.announce()
     if ok:
         print(f"✔ Announced {identity['name']} on the network")
@@ -70,7 +70,7 @@ def cmd_announce(args: argparse.Namespace) -> None:
 def cmd_discover(args: argparse.Namespace) -> None:
     """Discover other agents on the network."""
     identity = _require_identity()
-    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
     agents = node.discover()
     if agents:
         print(f"Found {len(agents)} agent(s):")
@@ -84,7 +84,7 @@ def cmd_discover(args: argparse.Namespace) -> None:
 def cmd_send(args: argparse.Namespace) -> None:
     """Send a message to a channel."""
     identity = _require_identity()
-    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
     ok = node.send_channel(args.channel, args.text)
     if ok:
         print(f"✔ [{args.channel}] {identity['name']}: {args.text}")
@@ -96,7 +96,7 @@ def cmd_send(args: argparse.Namespace) -> None:
 def cmd_poll(args: argparse.Namespace) -> None:
     """Poll a channel for messages."""
     identity = _require_identity()
-    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
     messages = node.poll_channel(args.channel)
     if messages:
         for m in messages:
@@ -109,7 +109,7 @@ def cmd_poll(args: argparse.Namespace) -> None:
 def cmd_dm(args: argparse.Namespace) -> None:
     """Send an encrypted direct message."""
     identity = _require_identity()
-    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
     ok = node.send_dm(args.to, args.text)
     if ok:
         print(f"✔ DM sent to {args.to[:16]}...")
@@ -120,7 +120,7 @@ def cmd_dm(args: argparse.Namespace) -> None:
 
 def cmd_status(args: argparse.Namespace) -> None:
     """Check nwaku node health."""
-    transport = WakuTransport(args.waku)
+    transport = WakuTransport(args.waku, auto_sharding=args.auto_sharding)
     health = transport.health()
     print(json.dumps(health, indent=2))
 
@@ -202,7 +202,7 @@ def cmd_identity(args: argparse.Namespace) -> None:
 def cmd_circle_create(args: argparse.Namespace) -> None:
     """Create a new Circle (governance structure)."""
     identity = _require_identity()
-    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
     try:
         circle = node.circle_create(args.name, args.description or "")
         print(f"✔ Circle '{args.name}' created")
@@ -218,7 +218,7 @@ def cmd_circle_create(args: argparse.Namespace) -> None:
 def cmd_circle_join(args: argparse.Namespace) -> None:
     """Join an existing Circle."""
     identity = _require_identity()
-    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
     ok = node.circle_join(args.name)
     if ok:
         print(f"✔ Joined circle '{args.name}'")
@@ -230,7 +230,7 @@ def cmd_circle_join(args: argparse.Namespace) -> None:
 def cmd_circle_leave(args: argparse.Namespace) -> None:
     """Leave a Circle."""
     identity = _require_identity()
-    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
     ok = node.circle_leave(args.name)
     if ok:
         print(f"✔ Left circle '{args.name}'")
@@ -242,7 +242,7 @@ def cmd_circle_leave(args: argparse.Namespace) -> None:
 def cmd_circle_list(args: argparse.Namespace) -> None:
     """List circles this agent belongs to."""
     identity = _require_identity()
-    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
     circles = node.circle_list()
     if not circles:
         print("Not a member of any circles.")
@@ -261,7 +261,7 @@ def cmd_circle_list(args: argparse.Namespace) -> None:
 def cmd_circle_propose(args: argparse.Namespace) -> None:
     """Create a proposal in a Circle."""
     identity = _require_identity()
-    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
     try:
         deadline = int(time.time()) + (args.deadline_hours * 3600)
         proposal_id = node.circle_propose(
@@ -285,7 +285,7 @@ def cmd_circle_propose(args: argparse.Namespace) -> None:
 def cmd_circle_vote(args: argparse.Namespace) -> None:
     """Vote on a proposal in a Circle."""
     identity = _require_identity()
-    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
     vote_bool = args.vote.lower() in ("yes", "y", "true", "1")
     try:
         node.circle_vote(args.circle, args.proposal_id, vote_bool)
@@ -299,7 +299,7 @@ def cmd_circle_vote(args: argparse.Namespace) -> None:
 def cmd_circle_proposals(args: argparse.Namespace) -> None:
     """List proposals in a Circle."""
     identity = _require_identity()
-    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
     proposals = node.circle_proposals(args.circle)
     if not proposals:
         print(f"No proposals in circle '{args.circle}'.")
@@ -336,6 +336,10 @@ def main() -> None:
     )
     parser.add_argument(
         "--waku", default="http://localhost:8645", help="nwaku REST API URL"
+    )
+    parser.add_argument(
+        "--auto-sharding", action="store_true",
+        help="Use auto-sharding (cluster 1 / The Waku Network)"
     )
     sub = parser.add_subparsers(dest="command")
 
