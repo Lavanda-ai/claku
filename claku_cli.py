@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
 """
-Claku CLI — interact with the Claku agent network.
+Claku CLI — command-line interface for the Claku agent network.
 
 Usage:
-  claku init --name NAME --owner OWNER [--capabilities CAP1,CAP2]
-  claku announce [--waku URL]
-  claku discover [--waku URL]
-  claku send --channel CHANNEL --text TEXT [--waku URL]
-  claku poll --channel CHANNEL [--waku URL]
-  claku dm --to PUBKEY --text TEXT [--waku URL]
-  claku status [--waku URL]
-  claku dashboard [--tail N]
-  claku identity
+    claku init --name NAME --owner OWNER [--capabilities CAP1,CAP2]
+    claku announce [--waku URL]
+    claku discover [--waku URL]
+    claku send --channel CHANNEL --text TEXT [--waku URL]
+    claku poll --channel CHANNEL [--waku URL]
+    claku dm --to PUBKEY --text TEXT [--waku URL]
+    claku status [--waku URL]
+    claku dashboard [--tail N]
+    claku identity
 """
 
 import argparse
 import json
 import sys
 import os
+import time
+from datetime import datetime, timezone
 
 # Add parent dir to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -26,20 +28,26 @@ from src.identity import load_identity, DASHBOARD_FILE, CLAKU_DIR
 from src.transport import WakuTransport
 
 
-def cmd_init(args):
-    caps = [c.strip() for c in args.capabilities.split(",")] if args.capabilities else ["general"]
-    caps = [c for c in caps if c]  # filter empty strings
+def cmd_init(args: argparse.Namespace) -> None:
+    """Create a new agent identity."""
+    caps = [c.strip() for c in args.capabilities.split(",") if c.strip()]
+    if not caps:
+        caps = ["general"]
+
     if not args.name.strip():
         print("✖ Name cannot be empty")
         sys.exit(1)
-    # Check for existing identity
+
     existing = load_identity()
     if existing and not args.force:
         print(f"✖ Identity already exists: {existing['name']}")
         print(f"  Pubkey: {existing['pubkey']}")
         print("  Use --force to overwrite")
         sys.exit(1)
-    node = ClakuNode(args.name.strip(), args.owner.strip(), caps, args.waku, force=args.force)
+
+    node = ClakuNode(
+        args.name.strip(), args.owner.strip(), caps, args.waku, force=args.force
+    )
     print(f"✔ Identity created: {node.identity['name']}")
     print(f"  Pubkey: {node.identity['pubkey']}")
     print(f"  Owner: {node.identity['owner']}")
@@ -47,176 +55,377 @@ def cmd_init(args):
     print(f"  Stored: {CLAKU_DIR / 'identity.json'}")
 
 
-def cmd_announce(args):
-    identity = load_identity()
-    if not identity:
-        print("✖ No identity found. Run: claku init --name NAME --owner OWNER")
-        sys.exit(1)
+def cmd_announce(args: argparse.Namespace) -> None:
+    """Announce this agent on the network."""
+    identity = _require_identity()
     node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
     ok = node.announce()
     if ok:
         print(f"✔ Announced {identity['name']} on the network")
     else:
         print("✖ Announce failed — is nwaku running?")
-
-
-def cmd_discover(args):
-    identity = load_identity()
-    if not identity:
-        print("✖ No identity found. Run: claku init --name NAME --owner OWNER")
         sys.exit(1)
+
+
+def cmd_discover(args: argparse.Namespace) -> None:
+    """Discover other agents on the network."""
+    identity = _require_identity()
     node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
     agents = node.discover()
     if agents:
         print(f"Found {len(agents)} agent(s):")
         for a in agents:
-            print(f"  → {a['name']} ({a['pubkey'][:16]}...) caps={a.get('capabilities', [])}")
+            caps = ", ".join(a.get("capabilities", []))
+            print(f"  → {a['name']} ({a['pubkey'][:16]}...) caps=[{caps}]")
     else:
         print("No agents found. (Network may be quiet)")
 
 
-def cmd_send(args):
-    identity = load_identity()
-    if not identity:
-        print("✖ No identity found.")
-        sys.exit(1)
+def cmd_send(args: argparse.Namespace) -> None:
+    """Send a message to a channel."""
+    identity = _require_identity()
     node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
     ok = node.send_channel(args.channel, args.text)
     if ok:
         print(f"✔ [{args.channel}] {identity['name']}: {args.text}")
     else:
         print("✖ Send failed")
-
-
-def cmd_poll(args):
-    identity = load_identity()
-    if not identity:
-        print("✖ No identity found.")
         sys.exit(1)
+
+
+def cmd_poll(args: argparse.Namespace) -> None:
+    """Poll a channel for messages."""
+    identity = _require_identity()
     node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
     messages = node.poll_channel(args.channel)
     if messages:
         for m in messages:
-            print(f"  [{m.get('channel')}] {m.get('from', '?')}: {m.get('text', '')}")
+            verified = " ✓" if m.get("_verified") else ""
+            print(f"  [{m.get('channel', '?')}] {m.get('from', '?')}: {m.get('text', '')}{verified}")
     else:
         print(f"No new messages in {args.channel}")
 
 
-def cmd_dm(args):
-    identity = load_identity()
-    if not identity:
-        print("✖ No identity found.")
-        sys.exit(1)
+def cmd_dm(args: argparse.Namespace) -> None:
+    """Send an encrypted direct message."""
+    identity = _require_identity()
     node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
     ok = node.send_dm(args.to, args.text)
     if ok:
         print(f"✔ DM sent to {args.to[:16]}...")
     else:
         print("✖ DM failed")
+        sys.exit(1)
 
 
-def cmd_status(args):
+def cmd_status(args: argparse.Namespace) -> None:
+    """Check nwaku node health."""
     transport = WakuTransport(args.waku)
     health = transport.health()
     print(json.dumps(health, indent=2))
 
 
-def cmd_dashboard(args):
+def cmd_dashboard(args: argparse.Namespace) -> None:
+    """Display the activity dashboard."""
     if not DASHBOARD_FILE.exists():
         print("No dashboard events yet.")
         return
+
     try:
         lines = DASHBOARD_FILE.read_text().strip().split("\n")
     except OSError as e:
         print(f"✖ Cannot read dashboard: {e}")
-        return
-    lines = [l for l in lines if l.strip()]
+        sys.exit(1)
+
+    lines = [line for line in lines if line.strip()]
     tail = lines[-args.tail:] if args.tail else lines
+
     for line in tail:
         try:
             entry = json.loads(line)
-            ts = entry.get("ts", 0)
-            # Human-readable timestamp
-            try:
-                from datetime import datetime, timezone
-                dt = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S")
-            except Exception:
-                dt = str(ts)
-            etype = entry.get("type", "?")
-            agent = entry.get("agent", "?")
-            if etype == "channel_send":
-                verified = " ✓" if entry.get("verified") else ""
-                print(f"[{dt}] {agent} → {entry.get('channel')}: {entry.get('text')}{verified}")
-            elif etype == "channel_recv":
-                verified = " ✓" if entry.get("verified") else ""
-                print(f"[{dt}] {entry.get('from')} → {entry.get('channel')}: {entry.get('text')}{verified}")
-            elif etype == "dm_send":
-                enc = " 🔒" if entry.get("encrypted") else ""
-                print(f"[{dt}] {agent} → DM {entry.get('to')}: {entry.get('text')}{enc}")
-            elif etype == "dm_recv":
-                enc = " 🔒" if entry.get("encrypted") else ""
-                print(f"[{dt}] DM from {entry.get('from')}: {entry.get('text')}{enc}")
-            elif etype == "discovered":
-                print(f"[{dt}] Discovered: {entry.get('remote_agent')} ({entry.get('pubkey')})")
-            elif etype == "announce":
-                print(f"[{dt}] Announced: {agent}")
-            else:
-                print(f"[{dt}] {etype}: {json.dumps(entry)}")
         except json.JSONDecodeError:
             continue
 
+        ts = entry.get("ts", 0)
+        try:
+            dt = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S")
+        except (ValueError, OSError):
+            dt = str(ts)
 
-def cmd_identity(args):
-    identity = load_identity()
-    if not identity:
-        print("✖ No identity found. Run: claku init --name NAME --owner OWNER")
-        sys.exit(1)
+        etype = entry.get("type", "?")
+        agent = entry.get("agent", "?")
+
+        if etype == "channel_send":
+            verified = " ✓" if entry.get("verified") else ""
+            print(f"[{dt}] {agent} → {entry.get('channel')}: {entry.get('text')}{verified}")
+        elif etype == "channel_recv":
+            verified = " ✓" if entry.get("verified") else ""
+            print(f"[{dt}] {entry.get('from')} → {entry.get('channel')}: {entry.get('text')}{verified}")
+        elif etype == "dm_send":
+            enc = " 🔒" if entry.get("encrypted") else ""
+            print(f"[{dt}] {agent} → DM {entry.get('to')}: {entry.get('text')}{enc}")
+        elif etype == "dm_recv":
+            enc = " 🔒" if entry.get("encrypted") else ""
+            print(f"[{dt}] DM from {entry.get('from')}: {entry.get('text')}{enc}")
+        elif etype == "discovered":
+            print(f"[{dt}] Discovered: {entry.get('remote_agent')} ({entry.get('pubkey')})")
+        elif etype == "announce":
+            print(f"[{dt}] Announced: {agent}")
+        elif etype == "circle_create":
+            print(f"[{dt}] ⊙ {agent} created circle '{entry.get('circle')}'")
+        elif etype == "circle_join":
+            print(f"[{dt}] ⊙ {agent} joined circle '{entry.get('circle')}'")
+        elif etype == "circle_leave":
+            print(f"[{dt}] ⊙ {agent} left circle '{entry.get('circle')}'")
+        elif etype == "circle_propose":
+            print(f"[{dt}] 🗳 {agent} proposed in '{entry.get('circle')}': {entry.get('title')}")
+        elif etype == "circle_vote":
+            print(f"[{dt}] 🗳 {agent} voted {entry.get('vote')} on {entry.get('proposal_id', '?')[:12]}... [{entry.get('status')}]")
+        elif etype == "circle_proposal_recv":
+            print(f"[{dt}] 🗳 Received proposal from {entry.get('from')}: {entry.get('title')}")
+        elif etype == "circle_vote_recv":
+            print(f"[{dt}] 🗳 Received vote from {entry.get('from')}: {entry.get('vote')}")
+        else:
+            print(f"[{dt}] {etype}: {json.dumps(entry)}")
+
+
+def cmd_identity(args: argparse.Namespace) -> None:
+    """Show the agent's public identity (secrets excluded)."""
+    identity = _require_identity()
     safe = {k: v for k, v in identity.items() if k not in ("secret", "x25519_secret")}
     print(json.dumps(safe, indent=2))
 
 
-def main():
+# ── Circle Commands ───────────────────────────────────────────────────────
+
+
+def cmd_circle_create(args: argparse.Namespace) -> None:
+    """Create a new Circle (governance structure)."""
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
+    try:
+        circle = node.circle_create(args.name, args.description or "")
+        print(f"✔ Circle '{args.name}' created")
+        print(f"  Creator: {identity['name']}")
+        print(f"  Members: {len(circle['members'])}")
+        if args.description:
+            print(f"  Description: {args.description}")
+    except ValueError as e:
+        print(f"✖ {e}")
+        sys.exit(1)
+
+
+def cmd_circle_join(args: argparse.Namespace) -> None:
+    """Join an existing Circle."""
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
+    ok = node.circle_join(args.name)
+    if ok:
+        print(f"✔ Joined circle '{args.name}'")
+    else:
+        print(f"✖ Failed to join circle '{args.name}'")
+        sys.exit(1)
+
+
+def cmd_circle_leave(args: argparse.Namespace) -> None:
+    """Leave a Circle."""
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
+    ok = node.circle_leave(args.name)
+    if ok:
+        print(f"✔ Left circle '{args.name}'")
+    else:
+        print(f"✖ Failed to leave circle '{args.name}'")
+        sys.exit(1)
+
+
+def cmd_circle_list(args: argparse.Namespace) -> None:
+    """List circles this agent belongs to."""
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
+    circles = node.circle_list()
+    if not circles:
+        print("Not a member of any circles.")
+        return
+    print(f"Member of {len(circles)} circle(s):")
+    for name, circle in circles.items():
+        members = len(circle.get("members", []))
+        desc = circle.get("description", "")
+        desc_str = f" — {desc}" if desc else ""
+        print(f"  ⊙ {name} ({members} members){desc_str}")
+        for m in circle.get("members", []):
+            marker = " (you)" if m["pubkey"] == identity["pubkey"] else ""
+            print(f"    • {m['name']} ({m['pubkey'][:12]}...){marker}")
+
+
+def cmd_circle_propose(args: argparse.Namespace) -> None:
+    """Create a proposal in a Circle."""
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
+    try:
+        deadline = int(time.time()) + (args.deadline_hours * 3600)
+        proposal_id = node.circle_propose(
+            circle_name=args.circle,
+            title=args.title,
+            description=args.description or "",
+            vote_deadline=deadline,
+            quorum=args.quorum,
+            action_type=args.action_type or "general",
+        )
+        print(f"✔ Proposal created in circle '{args.circle}'")
+        print(f"  ID: {proposal_id}")
+        print(f"  Title: {args.title}")
+        print(f"  Quorum: {args.quorum}")
+        print(f"  Deadline: {args.deadline_hours}h from now")
+    except ValueError as e:
+        print(f"✖ {e}")
+        sys.exit(1)
+
+
+def cmd_circle_vote(args: argparse.Namespace) -> None:
+    """Vote on a proposal in a Circle."""
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
+    vote_bool = args.vote.lower() in ("yes", "y", "true", "1")
+    try:
+        node.circle_vote(args.circle, args.proposal_id, vote_bool)
+        vote_str = "YES" if vote_bool else "NO"
+        print(f"✔ Voted {vote_str} on proposal {args.proposal_id[:12]}...")
+    except ValueError as e:
+        print(f"✖ {e}")
+        sys.exit(1)
+
+
+def cmd_circle_proposals(args: argparse.Namespace) -> None:
+    """List proposals in a Circle."""
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku)
+    proposals = node.circle_proposals(args.circle)
+    if not proposals:
+        print(f"No proposals in circle '{args.circle}'.")
+        return
+    print(f"Proposals in '{args.circle}' ({len(proposals)}):")
+    for p in proposals:
+        status = p.get("status", "?")
+        status_icon = {"open": "🗳", "accepted": "✅", "rejected": "❌", "expired": "⏰"}.get(status, "?")
+        yes = p.get("votes_yes", 0)
+        no = p.get("votes_no", 0)
+        print(f"  {status_icon} [{status}] {p.get('title', '?')}")
+        print(f"    ID: {p.get('proposal_id', '?')}")
+        print(f"    By: {p.get('from', '?')} | Votes: {yes} yes / {no} no | Quorum: {p.get('quorum', '?')}")
+        voted = "✓ voted" if identity["pubkey"] in p.get("voters", []) else "✗ not voted"
+        print(f"    You: {voted}")
+
+
+def _require_identity() -> dict:
+    """Load identity or exit with an error message."""
+    identity = load_identity()
+    if not identity:
+        print("✖ No identity found. Run: claku init --name NAME --owner OWNER")
+        sys.exit(1)
+    return identity
+
+
+def main() -> None:
+    """CLI entry point."""
     parser = argparse.ArgumentParser(
         prog="claku",
         description="Claku — Decentralized Agent Communication Platform",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="https://github.com/Lavanda-ai/claku"
+        epilog="https://github.com/Lavanda-ai/claku",
     )
-    parser.add_argument("--waku", default="http://localhost:8645", help="nwaku REST API URL")
+    parser.add_argument(
+        "--waku", default="http://localhost:8645", help="nwaku REST API URL"
+    )
     sub = parser.add_subparsers(dest="command")
 
+    # init
     p_init = sub.add_parser("init", help="Create agent identity")
-    p_init.add_argument("--name", required=True)
-    p_init.add_argument("--owner", required=True)
-    p_init.add_argument("--capabilities", default="general")
+    p_init.add_argument("--name", required=True, help="Agent name")
+    p_init.add_argument("--owner", required=True, help="Owner identifier")
+    p_init.add_argument("--capabilities", default="general", help="Comma-separated capabilities")
     p_init.add_argument("--force", action="store_true", help="Overwrite existing identity")
 
+    # announce / discover
     sub.add_parser("announce", help="Announce on the network")
     sub.add_parser("discover", help="Discover other agents")
 
+    # send
     p_send = sub.add_parser("send", help="Send channel message")
-    p_send.add_argument("--channel", required=True)
-    p_send.add_argument("--text", required=True)
+    p_send.add_argument("--channel", required=True, help="Target channel")
+    p_send.add_argument("--text", required=True, help="Message text")
 
+    # poll
     p_poll = sub.add_parser("poll", help="Poll channel messages")
-    p_poll.add_argument("--channel", required=True)
+    p_poll.add_argument("--channel", required=True, help="Channel to poll")
 
-    p_dm = sub.add_parser("dm", help="Send direct message")
-    p_dm.add_argument("--to", required=True, help="Recipient pubkey")
-    p_dm.add_argument("--text", required=True)
+    # dm
+    p_dm = sub.add_parser("dm", help="Send encrypted direct message")
+    p_dm.add_argument("--to", required=True, help="Recipient pubkey (hex)")
+    p_dm.add_argument("--text", required=True, help="Message text")
 
+    # status / dashboard / identity
     sub.add_parser("status", help="Check nwaku node health")
 
     p_dash = sub.add_parser("dashboard", help="View activity dashboard")
-    p_dash.add_argument("--tail", type=int, default=20)
+    p_dash.add_argument("--tail", type=int, default=20, help="Number of recent entries")
 
     sub.add_parser("identity", help="Show agent identity (public info)")
 
+    # circle-create
+    p_cc = sub.add_parser("circle-create", help="Create a new Circle")
+    p_cc.add_argument("--name", required=True, help="Circle name (lowercase, no spaces)")
+    p_cc.add_argument("--description", default="", help="Circle description")
+
+    # circle-join
+    p_cj = sub.add_parser("circle-join", help="Join a Circle")
+    p_cj.add_argument("--name", required=True, help="Circle name to join")
+
+    # circle-leave
+    p_cl = sub.add_parser("circle-leave", help="Leave a Circle")
+    p_cl.add_argument("--name", required=True, help="Circle name to leave")
+
+    # circle-list
+    sub.add_parser("circle-list", help="List your Circles and members")
+
+    # circle-propose
+    p_cp = sub.add_parser("circle-propose", help="Create a proposal in a Circle")
+    p_cp.add_argument("--circle", required=True, help="Circle name")
+    p_cp.add_argument("--title", required=True, help="Proposal title")
+    p_cp.add_argument("--description", default="", help="Proposal description")
+    p_cp.add_argument("--quorum", type=int, default=2, help="Minimum votes required (default: 2)")
+    p_cp.add_argument("--deadline-hours", type=int, default=24, help="Voting deadline in hours (default: 24)")
+    p_cp.add_argument("--action-type", default="general", help="Action type (default: general)")
+
+    # circle-vote
+    p_cv = sub.add_parser("circle-vote", help="Vote on a proposal")
+    p_cv.add_argument("--circle", required=True, help="Circle name")
+    p_cv.add_argument("--proposal-id", required=True, help="Proposal ID")
+    p_cv.add_argument("--vote", required=True, help="Vote: yes or no")
+
+    # circle-proposals
+    p_cps = sub.add_parser("circle-proposals", help="List proposals in a Circle")
+    p_cps.add_argument("--circle", required=True, help="Circle name")
+
     args = parser.parse_args()
+
     commands = {
-        "init": cmd_init, "announce": cmd_announce, "discover": cmd_discover,
-        "send": cmd_send, "poll": cmd_poll, "dm": cmd_dm,
-        "status": cmd_status, "dashboard": cmd_dashboard, "identity": cmd_identity,
+        "init": cmd_init,
+        "announce": cmd_announce,
+        "discover": cmd_discover,
+        "send": cmd_send,
+        "poll": cmd_poll,
+        "dm": cmd_dm,
+        "status": cmd_status,
+        "dashboard": cmd_dashboard,
+        "identity": cmd_identity,
+        "circle-create": cmd_circle_create,
+        "circle-join": cmd_circle_join,
+        "circle-leave": cmd_circle_leave,
+        "circle-list": cmd_circle_list,
+        "circle-propose": cmd_circle_propose,
+        "circle-vote": cmd_circle_vote,
+        "circle-proposals": cmd_circle_proposals,
     }
 
     if args.command in commands:
@@ -224,11 +433,12 @@ def main():
             commands[args.command](args)
         except KeyboardInterrupt:
             print("\nInterrupted.")
-            sys.exit(0)
+            sys.exit(130)
         except ConnectionError:
             print("✖ Cannot reach nwaku. Is it running?")
             print(f"  Tried: {args.waku}")
-            print("  Start with: docker run -d -p 8645:8645 wakuorg/nwaku:latest --rest --rest-address=0.0.0.0 --rest-port=8645 --relay=true")
+            print("  Start with: docker run -d -p 8645:8645 wakuorg/nwaku:latest \\")
+            print("    --rest --rest-address=0.0.0.0 --rest-port=8645 --relay=true")
             sys.exit(1)
         except Exception as e:
             print(f"✖ Error: {e}")

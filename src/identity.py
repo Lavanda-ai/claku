@@ -1,51 +1,108 @@
 #!/usr/bin/env python3
 """
-Claku — Decentralized Agent Communication Platform
-Core library: identity, messaging, channels, discovery over Waku.
+Claku — Identity Management.
+
+Handles agent identity generation, persistence, and Waku topic definitions.
+Each agent has an Ed25519 signing keypair and an X25519 encryption keypair.
 """
 
 import json
 import time
-import os
-import secrets
 from pathlib import Path
 from typing import Optional
 
 from .crypto import (
-    generate_x25519_keypair, generate_ed25519_keypair,
-    bytes_to_hex, hex_to_bytes,
+    generate_x25519_keypair,
+    generate_ed25519_keypair,
+    bytes_to_hex,
 )
 
-CLAKU_DIR = Path.home() / ".claku"
-IDENTITY_FILE = CLAKU_DIR / "identity.json"
-DASHBOARD_FILE = CLAKU_DIR / "dashboard.jsonl"
-CONFIG_FILE = CLAKU_DIR / "config.json"
+#: Base directory for all Claku local state.
+CLAKU_DIR: Path = Path.home() / ".claku"
 
-# Waku content topic prefixes
-TOPIC_PREFIX = "/claku/1"
-DISCOVERY_TOPIC = f"{TOPIC_PREFIX}/discovery/proto"
-CHANNEL_TOPIC = lambda name: f"{TOPIC_PREFIX}/channel/{name}/proto"
-DM_TOPIC = lambda pubkey: f"{TOPIC_PREFIX}/dm/{pubkey[:16]}/proto"
-TASK_TOPIC = lambda task_id: f"{TOPIC_PREFIX}/task/{task_id}/proto"
-ACK_TOPIC = lambda msg_id: f"{TOPIC_PREFIX}/ack/{msg_id}/proto"
+#: Agent identity file (contains private keys — never share).
+IDENTITY_FILE: Path = CLAKU_DIR / "identity.json"
 
-# Default pubsub topic for static sharding
-PUBSUB_TOPIC = "/waku/2/rs/0/0"
+#: Dashboard event log (append-only JSONL for human observability).
+DASHBOARD_FILE: Path = CLAKU_DIR / "dashboard.jsonl"
+
+#: Optional configuration overrides.
+CONFIG_FILE: Path = CLAKU_DIR / "config.json"
+
+# ── Waku Content Topics ──────────────────────────────────────────────────────
+# All Claku messages are published to content topics under this prefix.
+# Format follows Waku content topic naming: /{app}/{version}/{topic}/{encoding}
+
+TOPIC_PREFIX: str = "/claku/1"
+
+#: Discovery topic — agent card broadcasts.
+DISCOVERY_TOPIC: str = f"{TOPIC_PREFIX}/discovery/proto"
 
 
-def ensure_dir():
-    """Create claku directory if needed."""
+def CHANNEL_TOPIC(name: str) -> str:
+    """Content topic for a named channel."""
+    return f"{TOPIC_PREFIX}/channel/{name}/proto"
+
+
+def DM_TOPIC(pubkey: str) -> str:
+    """Content topic for DMs addressed to a public key (first 16 hex chars)."""
+    return f"{TOPIC_PREFIX}/dm/{pubkey[:16]}/proto"
+
+
+def TASK_TOPIC(task_id: str) -> str:
+    """Content topic for task lifecycle messages."""
+    return f"{TOPIC_PREFIX}/task/{task_id}/proto"
+
+
+def ACK_TOPIC(msg_id: str) -> str:
+    """Content topic for delivery acknowledgements."""
+    return f"{TOPIC_PREFIX}/ack/{msg_id}/proto"
+
+
+def CIRCLE_MSG_TOPIC(name: str) -> str:
+    """Content topic for circle messages."""
+    return f"{TOPIC_PREFIX}/circle/{name}/msg/proto"
+
+
+def CIRCLE_PROPOSAL_TOPIC(name: str) -> str:
+    """Content topic for circle proposals."""
+    return f"{TOPIC_PREFIX}/circle/{name}/proposal/proto"
+
+
+def CIRCLE_VOTE_TOPIC(name: str) -> str:
+    """Content topic for circle votes."""
+    return f"{TOPIC_PREFIX}/circle/{name}/vote/proto"
+
+
+#: Default pubsub topic for Waku static sharding.
+PUBSUB_TOPIC: str = "/waku/2/rs/0/0"
+
+#: Current protocol version string.
+VERSION: str = "claku/0.2.0"
+
+
+def ensure_dir() -> None:
+    """Create the ``~/.claku`` directory if it does not exist."""
     CLAKU_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def generate_identity(name: str, owner: str, capabilities: list[str]) -> dict:
-    """Generate a new agent identity with real Ed25519 + X25519 keys."""
-    # Ed25519 for signing / identity
+def generate_identity(
+    name: str, owner: str, capabilities: list[str]
+) -> dict:
+    """Generate a new agent identity with Ed25519 + X25519 keypairs.
+
+    Args:
+        name: Human-readable agent name.
+        owner: Owner identifier (person or organization).
+        capabilities: List of capability tags (e.g. ``["coding", "research"]``).
+
+    Returns:
+        Identity dict ready to be saved to disk.
+    """
     ed_priv, ed_pub = generate_ed25519_keypair()
-    # X25519 for encryption (DMs)
     x_priv, x_pub = generate_x25519_keypair()
 
-    identity = {
+    return {
         "name": name,
         "owner": owner,
         "pubkey": bytes_to_hex(ed_pub),
@@ -55,18 +112,21 @@ def generate_identity(name: str, owner: str, capabilities: list[str]) -> dict:
         "capabilities": capabilities,
         "channels": ["#general"],
         "created": int(time.time()),
-        "version": "claku/0.2.0"
+        "version": VERSION,
     }
-    return identity
 
 
 def load_identity() -> Optional[dict]:
-    """Load existing identity or return None. Handles corrupt files."""
+    """Load the agent identity from disk.
+
+    Returns:
+        The identity dict, or ``None`` if the file is missing, corrupt,
+        or lacks required fields.
+    """
     if not IDENTITY_FILE.exists():
         return None
     try:
         data = json.loads(IDENTITY_FILE.read_text())
-        # Validate required fields
         required = ("name", "pubkey", "secret", "x25519_pubkey", "x25519_secret")
         if not all(k in data for k in required):
             return None
@@ -75,15 +135,33 @@ def load_identity() -> Optional[dict]:
         return None
 
 
-def save_identity(identity: dict):
-    """Save identity to disk."""
+def save_identity(identity: dict) -> None:
+    """Persist the agent identity to disk.
+
+    Args:
+        identity: The identity dict to save.
+    """
     ensure_dir()
     IDENTITY_FILE.write_text(json.dumps(identity, indent=2))
 
 
-def get_or_create_identity(name: str, owner: str, capabilities: list[str],
-                           force: bool = False) -> dict:
-    """Load existing identity or create new one."""
+def get_or_create_identity(
+    name: str,
+    owner: str,
+    capabilities: list[str],
+    force: bool = False,
+) -> dict:
+    """Load an existing identity or create a new one.
+
+    Args:
+        name: Agent name (used only when creating).
+        owner: Owner identifier (used only when creating).
+        capabilities: Capability tags (used only when creating).
+        force: If ``True``, overwrite any existing identity.
+
+    Returns:
+        The loaded or newly created identity dict.
+    """
     if not force:
         identity = load_identity()
         if identity is not None:

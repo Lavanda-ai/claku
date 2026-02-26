@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-Claku — Cryptography Module
-X25519 ECDH key exchange + ChaCha20-Poly1305 AEAD encryption.
+Claku — Cryptography Module.
+
+X25519 ECDH key exchange + ChaCha20-Poly1305 AEAD encryption for DMs.
 Ed25519 signing for channel message authentication.
 """
 
 import os
-import json
 import base64
-import hashlib
-from typing import Optional, Tuple
+from typing import Tuple
 
 from cryptography.hazmat.primitives.asymmetric.x25519 import (
     X25519PrivateKey, X25519PublicKey,

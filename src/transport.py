@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-Claku — Waku Transport Layer
-Handles publish/subscribe/poll via nwaku REST API.
+Claku — Waku Transport Layer.
+
+Publish/subscribe/poll via the nwaku REST API.
+All Claku messages flow through Waku content topics using relay protocol.
 """
 
 import json
@@ -11,21 +13,44 @@ import urllib.parse
 import urllib.request
 from typing import Optional
 
+#: Default pubsub topic for Waku static sharding (cluster 0, shard 0).
+PUBSUB_TOPIC: str = "/waku/2/rs/0/0"
 
-PUBSUB_TOPIC = "/waku/2/rs/0/0"
+#: HTTP request timeout in seconds.
+REQUEST_TIMEOUT: int = 10
 
 
 class WakuTransport:
-    """nwaku REST API transport for Claku messaging."""
+    """Transport layer for Claku messaging via the nwaku REST API.
 
-    def __init__(self, waku_url: str = "http://localhost:8645"):
-        self.waku_url = waku_url.rstrip("/")
+    Wraps publish, subscribe, and poll operations against a single nwaku node.
+    All payloads are base64-encoded before transmission per the Waku REST spec.
+    """
+
+    def __init__(self, waku_url: str = "http://localhost:8645") -> None:
+        self.waku_url: str = waku_url.rstrip("/")
 
     def _encode_topic(self, topic: str) -> str:
+        """URL-encode a Waku topic for use in REST paths."""
         return urllib.parse.quote(topic, safe="")
 
-    def _request(self, method: str, path: str, data: Optional[dict] = None) -> tuple[int, str]:
-        """Make HTTP request to nwaku REST API."""
+    def _request(
+        self, method: str, path: str, data: Optional[dict | list] = None
+    ) -> tuple[int, str]:
+        """Make an HTTP request to the nwaku REST API.
+
+        Args:
+            method: HTTP method (GET, POST, etc.).
+            path: API path (e.g. ``/health``).
+            data: JSON-serializable body, or ``None`` for bodyless requests.
+
+        Returns:
+            Tuple of (HTTP status code, response body as string).
+            Returns ``(0, error_message)`` on unexpected failures.
+
+        Raises:
+            ConnectionError: If the nwaku node is unreachable.
+        """
         url = f"{self.waku_url}{path}"
         body = None
         if data is not None:
@@ -35,7 +60,7 @@ class WakuTransport:
         req.add_header("Content-Type", "application/json")
 
         try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
                 return resp.status, resp.read().decode("utf-8")
         except urllib.error.HTTPError as e:
             try:
@@ -43,29 +68,52 @@ class WakuTransport:
             except Exception:
                 return e.code, str(e)
         except urllib.error.URLError as e:
-            raise ConnectionError(f"Cannot reach nwaku at {self.waku_url}: {e.reason}")
+            raise ConnectionError(
+                f"Cannot reach nwaku at {self.waku_url}: {e.reason}"
+            )
         except OSError as e:
-            raise ConnectionError(f"Network error connecting to {self.waku_url}: {e}")
-        except Exception as e:
-            return 0, str(e)
+            raise ConnectionError(
+                f"Network error connecting to {self.waku_url}: {e}"
+            )
 
     def health(self) -> dict:
-        """Check nwaku node health."""
+        """Check nwaku node health.
+
+        Returns:
+            Parsed JSON health response, or a dict with ``error`` key on failure.
+        """
         status, body = self._request("GET", "/health")
         if status == 200:
-            return json.loads(body)
+            try:
+                return json.loads(body)
+            except json.JSONDecodeError:
+                return {"status": status, "raw": body}
         return {"error": body, "status": status}
 
     def subscribe(self, pubsub_topic: str = PUBSUB_TOPIC) -> bool:
-        """Subscribe to a pubsub topic."""
-        status, body = self._request(
-            "POST", "/relay/v1/subscriptions",
-            [pubsub_topic]
+        """Subscribe to a pubsub topic for relay messages.
+
+        Args:
+            pubsub_topic: The pubsub topic string. Defaults to cluster 0, shard 0.
+
+        Returns:
+            ``True`` if the subscription succeeded.
+        """
+        status, _ = self._request(
+            "POST", "/relay/v1/subscriptions", [pubsub_topic]
         )
         return status == 200
 
     def publish(self, content_topic: str, payload: bytes) -> bool:
-        """Publish a message to a content topic."""
+        """Publish a raw payload to a Waku content topic.
+
+        Args:
+            content_topic: Waku content topic string.
+            payload: Raw bytes to publish (will be base64-encoded).
+
+        Returns:
+            ``True`` if the publish succeeded.
+        """
         encoded = base64.b64encode(payload).decode("ascii")
         now_ns = int(time.time() * 1e9)
 
@@ -76,11 +124,19 @@ class WakuTransport:
         }
 
         path = f"/relay/v1/messages/{self._encode_topic(PUBSUB_TOPIC)}"
-        status, body = self._request("POST", path, msg)
+        status, _ = self._request("POST", path, msg)
         return status == 200
 
     def poll(self, content_topic: Optional[str] = None) -> list[dict]:
-        """Poll for messages. Optionally filter by content topic."""
+        """Poll for raw messages from the relay subscription.
+
+        Args:
+            content_topic: If provided, only return messages matching this topic.
+
+        Returns:
+            List of dicts with keys ``content_topic``, ``payload`` (bytes),
+            and ``timestamp``.
+        """
         path = f"/relay/v1/messages/{self._encode_topic(PUBSUB_TOPIC)}"
         status, body = self._request("GET", path)
 
@@ -92,12 +148,11 @@ class WakuTransport:
         except json.JSONDecodeError:
             return []
 
-        results = []
+        results: list[dict] = []
         for msg in messages:
             ct = msg.get("contentTopic", "")
             if content_topic and ct != content_topic:
                 continue
-
             try:
                 payload = base64.b64decode(msg.get("payload", ""))
                 results.append({
@@ -111,14 +166,32 @@ class WakuTransport:
         return results
 
     def publish_json(self, content_topic: str, data: dict) -> bool:
-        """Publish a JSON message."""
+        """Publish a JSON-serializable dict as a Waku message.
+
+        Args:
+            content_topic: Waku content topic string.
+            data: Dict to serialize and publish.
+
+        Returns:
+            ``True`` if the publish succeeded.
+        """
         payload = json.dumps(data).encode("utf-8")
         return self.publish(content_topic, payload)
 
     def poll_json(self, content_topic: Optional[str] = None) -> list[dict]:
-        """Poll and parse JSON messages."""
+        """Poll and parse JSON messages from the relay subscription.
+
+        Silently skips messages that are not valid JSON.
+
+        Args:
+            content_topic: If provided, only return messages matching this topic.
+
+        Returns:
+            List of parsed JSON dicts. Each dict is augmented with
+            ``_content_topic`` and ``_timestamp`` metadata keys.
+        """
         messages = self.poll(content_topic)
-        results = []
+        results: list[dict] = []
         for msg in messages:
             try:
                 parsed = json.loads(msg["payload"])
