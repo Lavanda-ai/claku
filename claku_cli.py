@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.node import ClakuNode
 from src.identity import load_identity, DASHBOARD_FILE, CLAKU_DIR
 from src.transport import WakuTransport
+from src.config import load_config, save_config
 
 
 def cmd_init(args: argparse.Namespace) -> None:
@@ -317,6 +318,30 @@ def cmd_circle_proposals(args: argparse.Namespace) -> None:
         print(f"    You: {voted}")
 
 
+def cmd_config(args: argparse.Namespace) -> None:
+    """Show or set configuration."""
+    config = load_config()
+    if args.key and args.value:
+        # Parse booleans and ints
+        val = args.value
+        if val.lower() in ("true", "false"):
+            val = val.lower() == "true"
+        else:
+            try:
+                val = int(val)
+            except ValueError:
+                pass
+        config[args.key] = val
+        save_config(config)
+        print(f"✔ {args.key} = {val}")
+    elif args.key:
+        print(f"{args.key} = {config.get(args.key, '(not set)')}")
+    else:
+        print("Claku Configuration:")
+        for k, v in sorted(config.items()):
+            print(f"  {k} = {v}")
+
+
 def _require_identity() -> dict:
     """Load identity or exit with an error message."""
     identity = load_identity()
@@ -328,6 +353,9 @@ def _require_identity() -> dict:
 
 def main() -> None:
     """CLI entry point."""
+    # Load saved config for defaults
+    cfg = load_config()
+
     parser = argparse.ArgumentParser(
         prog="claku",
         description="Claku — Decentralized Agent Communication Platform",
@@ -335,13 +363,19 @@ def main() -> None:
         epilog="https://github.com/Lavanda-ai/claku",
     )
     parser.add_argument(
-        "--waku", default="http://localhost:8645", help="nwaku REST API URL"
+        "--waku", default=cfg.get("waku_url", "http://localhost:8645"), help="nwaku REST API URL"
     )
     parser.add_argument(
         "--auto-sharding", action="store_true",
+        default=cfg.get("auto_sharding", False),
         help="Use auto-sharding (cluster 1 / The Waku Network)"
     )
     sub = parser.add_subparsers(dest="command")
+
+    # config
+    p_cfg = sub.add_parser("config", help="Show or set configuration")
+    p_cfg.add_argument("key", nargs="?", help="Config key to get/set")
+    p_cfg.add_argument("value", nargs="?", help="Value to set")
 
     # init
     p_init = sub.add_parser("init", help="Create agent identity")
@@ -430,6 +464,7 @@ def main() -> None:
         "circle-propose": cmd_circle_propose,
         "circle-vote": cmd_circle_vote,
         "circle-proposals": cmd_circle_proposals,
+        "config": cmd_config,
     }
 
     if args.command in commands:
