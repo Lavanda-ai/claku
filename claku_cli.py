@@ -126,6 +126,16 @@ def cmd_status(args: argparse.Namespace) -> None:
     print(json.dumps(health, indent=2))
 
 
+def cmd_version(args: argparse.Namespace) -> None:
+    """Show Claku version."""
+    from src import __version__
+    print(f"Claku v{__version__}")
+    cfg = load_config()
+    mode = "The Waku Network (cluster 1)" if cfg.get("auto_sharding") else "Standalone (cluster 0)"
+    print(f"Mode: {mode}")
+    print(f"Waku: {cfg.get('waku_url', 'http://localhost:8645')}")
+
+
 def cmd_history(args: argparse.Namespace) -> None:
     """Query historical messages from Waku Store."""
     from src.identity import CHANNEL_TOPIC, DISCOVERY_TOPIC, CIRCLE_MSG_TOPIC
@@ -435,6 +445,7 @@ def main() -> None:
 
     # status / dashboard / identity
     sub.add_parser("status", help="Check nwaku node health")
+    sub.add_parser("version", help="Show Claku version and config")
 
     p_hist = sub.add_parser("history", help="Query historical messages from Waku Store")
     p_hist.add_argument("--channel", help="Filter by channel name")
@@ -492,6 +503,7 @@ def main() -> None:
         "poll": cmd_poll,
         "dm": cmd_dm,
         "status": cmd_status,
+        "version": cmd_version,
         "history": cmd_history,
         "dashboard": cmd_dashboard,
         "identity": cmd_identity,
