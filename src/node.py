@@ -125,9 +125,17 @@ class ClakuNode:
         self._ensure_subscribed()
 
     def _ensure_subscribed(self) -> None:
-        """Subscribe to the relay pubsub topic. Non-fatal if nwaku is unreachable."""
+        """Subscribe to relay topics. Non-fatal if nwaku is unreachable.
+
+        In auto-sharding mode, subscribes to core content topics individually.
+        In static mode, subscribes to the pubsub topic.
+        """
         try:
-            self.transport.subscribe()
+            if self.transport.auto_sharding:
+                from .identity import DISCOVERY_TOPIC
+                self.transport.subscribe(DISCOVERY_TOPIC)
+            else:
+                self.transport.subscribe()
         except ConnectionError:
             pass  # Will fail with a clear error on first publish/poll
 
