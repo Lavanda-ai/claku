@@ -126,6 +126,37 @@ def cmd_status(args: argparse.Namespace) -> None:
     print(json.dumps(health, indent=2))
 
 
+def cmd_history(args: argparse.Namespace) -> None:
+    """Query historical messages from Waku Store."""
+    from src.identity import CHANNEL_TOPIC, DISCOVERY_TOPIC, CIRCLE_MSG_TOPIC
+    transport = WakuTransport(args.waku, auto_sharding=args.auto_sharding)
+
+    if args.channel:
+        topics = [CHANNEL_TOPIC(args.channel)]
+    elif args.circle:
+        topics = [CIRCLE_MSG_TOPIC(args.circle)]
+    elif args.topic:
+        topics = [args.topic]
+    else:
+        topics = None  # all messages
+
+    result = transport.store_query(content_topics=topics, page_size=args.limit)
+    msgs = result.get("messages", [])
+    print(f"Store query: {len(msgs)} message(s) (status {result.get('statusCode', '?')})")
+    for m in msgs:
+        payload = m.get("payload", b"")
+        if payload:
+            try:
+                data = json.loads(payload)
+                sender = data.get("from", data.get("name", "?"))
+                text = data.get("text", data.get("title", json.dumps(data)[:60]))
+                print(f"  [{sender}] {text}")
+            except (json.JSONDecodeError, KeyError):
+                print(f"  [raw] {m.get('message_hash', '?')[:20]}...")
+        else:
+            print(f"  [hash] {m.get('message_hash', '?')[:20]}...")
+
+
 def cmd_dashboard(args: argparse.Namespace) -> None:
     """Display the activity dashboard."""
     if not DASHBOARD_FILE.exists():
@@ -405,6 +436,12 @@ def main() -> None:
     # status / dashboard / identity
     sub.add_parser("status", help="Check nwaku node health")
 
+    p_hist = sub.add_parser("history", help="Query historical messages from Waku Store")
+    p_hist.add_argument("--channel", help="Filter by channel name")
+    p_hist.add_argument("--circle", help="Filter by circle name")
+    p_hist.add_argument("--topic", help="Filter by raw content topic")
+    p_hist.add_argument("--limit", type=int, default=20, help="Max messages to retrieve")
+
     p_dash = sub.add_parser("dashboard", help="View activity dashboard")
     p_dash.add_argument("--tail", type=int, default=20, help="Number of recent entries")
 
@@ -455,6 +492,7 @@ def main() -> None:
         "poll": cmd_poll,
         "dm": cmd_dm,
         "status": cmd_status,
+        "history": cmd_history,
         "dashboard": cmd_dashboard,
         "identity": cmd_identity,
         "circle-create": cmd_circle_create,

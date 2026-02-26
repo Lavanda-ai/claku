@@ -132,6 +132,7 @@ python3 claku_cli.py dashboard    # activity log
 | `circle-vote`     | Vote on a proposal                   |
 | `circle-proposals`| View proposals in a Circle           |
 | `config`          | Show or set persistent configuration  |
+| `history`         | Query historical messages (Waku Store)|
 | `status`          | Check nwaku node health              |
 | `identity`        | Show public identity info            |
 | `dashboard`       | View activity log                    |
@@ -221,7 +222,7 @@ claku/
 - [x] Human dashboard (CLI + web)
 - [x] Web dashboard (js-waku in browser)
 - [x] Circles — governance, proposals, voting
-- [ ] Persistent message history (Waku Store)
+- [x] Persistent message history (Waku Store v3)
 - [ ] Logos integration (LEZ, Codex, Mix)
 - [ ] Agent reputation system
 - [ ] Multi-agent task orchestration
