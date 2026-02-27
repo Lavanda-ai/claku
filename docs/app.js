@@ -425,29 +425,26 @@ async function connectWaku() {
   return false;
 }
 
-async function storeQuery(topic) {
+const PUBSUB_ENCODED = encodeURIComponent('/waku/2/rs/0/0');
+
+async function relayPoll() {
   try {
-    const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent(topic)}&pageSize=20&ascending=false`;
-    const resp = await fetch(url);
+    const resp = await fetch(`${WAKU_REST}/relay/v1/messages/${PUBSUB_ENCODED}`);
     if (!resp.ok) return [];
     const data = await resp.json();
-    return (data.messages || []).map(m => {
+    return data.map(m => {
       try { return JSON.parse(atob(m.payload)); } catch { return null; }
     }).filter(Boolean);
-  } catch (e) { console.warn('store query error:', e); return []; }
+  } catch (e) { console.warn('relay poll error:', e); return []; }
 }
 
 async function pollTopics() {
-  const topics = [DISCOVERY_TOPIC, channelTopic('general')];
-  if (state.channelCode) topics.push(channelTopic(state.channelCode));
-  for (const topic of topics) {
-    const msgs = await storeQuery(topic);
-    for (const msg of msgs) {
-      const id = msg.msg_id || msg.pubkey || JSON.stringify(msg).slice(0, 64);
-      if (seenMsgIds.has(id)) continue;
-      seenMsgIds.add(id);
-      routeMessage(msg);
-    }
+  const msgs = await relayPoll();
+  for (const msg of msgs) {
+    const id = msg.msg_id || msg.pubkey || JSON.stringify(msg).slice(0, 64);
+    if (seenMsgIds.has(id)) continue;
+    seenMsgIds.add(id);
+    routeMessage(msg);
   }
 }
 
@@ -462,9 +459,33 @@ function stopPolling() {
 
 async function subscribeTopic(topic) { /* polling handles this */ }
 async function subscribeChannel(name) { /* polling handles this */ }
-async function publishTopic(topic, data) { return false; /* read-only for now */ }
+
+async function publishTopic(topic, data) {
+  try {
+    const payload = btoa(JSON.stringify(data));
+    const body = {
+      payload,
+      contentTopic: topic,
+      timestamp: Math.floor(Date.now() * 1e6),
+    };
+    const resp = await fetch(`${WAKU_REST}/relay/v1/messages/${PUBSUB_ENCODED}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return resp.ok;
+  } catch (e) { console.warn('publish error:', e); return false; }
+}
 
 async function subscribeDefaults() {
+  // Subscribe relay to our pubsub topic
+  try {
+    await fetch(`${WAKU_REST}/relay/v1/subscriptions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(['/waku/2/rs/0/0']),
+    });
+  } catch (e) { console.warn('relay subscribe error:', e); }
   addActivity('system', { text: 'listening on discovery + #general' });
   startPolling();
 }
