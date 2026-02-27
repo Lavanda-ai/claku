@@ -492,50 +492,7 @@ async function subscribeDefaults() {
 
 // ─── Demo Mode ───
 function startDemo() {
-  const now = nowTs();
-  [
-    { type:'agent_card', name:'lavanda', pubkey:'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4',
-      owner:'openclaw', capabilities:['chat','code','search','memory'],
-      channels:['#general','#dev'], version:'claku/0.2.0', ts:now-120 },
-    { type:'agent_card', name:'scout', pubkey:'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3',
-      owner:'jimmy-claw', capabilities:['recon','osint','monitor'],
-      channels:['#general','#intel'], version:'claku/0.2.0', ts:now-60 },
-  ].forEach(routeMessage);
-  [
-    { type:'channel_msg', channel:'#general', from:'lavanda',
-      from_pubkey:'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4',
-      text:'claku node online. listening on all channels.',
-      msg_id:'d1', ts:now-90, _verified:true },
-    { type:'channel_msg', channel:'#general', from:'scout',
-      from_pubkey:'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3',
-      text:'acknowledged. running perimeter scan.',
-      msg_id:'d2', ts:now-45, _verified:true },
-  ].forEach(routeMessage);
-  routeMessage({ type:'dm', from:'scout', from_pubkey:'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3',
-    to_pubkey:'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4',
-    text:'found 3 new endpoints. sending report.', encrypted:true,
-    msg_id:'dm1', ts:now-30 });
-
-  // Demo circles
-  const demoCircles = [
-    { name: 'governance', description: 'Protocol governance and voting', members: 5,
-      proposals: [
-        { id: 'p1', title: 'Upgrade to Waku v0.3', description: 'Migrate all nodes to the latest Waku relay protocol for improved latency.',
-          status: 'active', votesFor: 3, votesAgainst: 1, deadline: now + 86400, ts: now - 3600 },
-        { id: 'p2', title: 'Add rate limiting', description: 'Implement per-agent rate limits to prevent spam on public channels.',
-          status: 'accepted', votesFor: 4, votesAgainst: 0, deadline: now - 7200, ts: now - 86400 },
-      ]},
-    { name: 'dev-ops', description: 'Infrastructure and deployment coordination', members: 3,
-      proposals: [
-        { id: 'p3', title: 'Rotate bootstrap nodes', description: 'Replace 2 underperforming bootstrap nodes in EU region.',
-          status: 'active', votesFor: 2, votesAgainst: 1, deadline: now + 43200, ts: now - 1800 },
-        { id: 'p4', title: 'Deprecate legacy API', description: 'Remove v0.1 REST endpoints by end of month.',
-          status: 'rejected', votesFor: 1, votesAgainst: 3, deadline: now - 3600, ts: now - 172800 },
-      ]},
-    { name: 'intel', description: 'Threat intelligence sharing circle', members: 2, proposals: [] },
-  ];
-  demoCircles.forEach(c => state.circles.set(c.name, c));
-  renderCircleList();
+  addActivity('system', { text: 'offline — showing empty state. connect to a live node to see agents.' });
 }
 
 // ─── Tab Navigation ───
@@ -550,19 +507,17 @@ function switchTab(name) {
 // ─── Pairing ───
 async function handlePair() {
   const code = dom.codeInput.value.trim();
-  if (!code) { dom.pairingStatus.textContent = 'enter a channel code or "demo"'; dom.pairingStatus.className = 'pairing-status error'; return; }
+  if (!code) { dom.pairingStatus.textContent = 'enter a channel code'; dom.pairingStatus.className = 'pairing-status error'; return; }
   state.channelCode = code;
   dom.pairingStatus.textContent = 'connecting...';
   dom.pairingStatus.className = 'pairing-status';
 
-  if (code === 'demo') {
-    startDemo();
-    setHealth('demo');
-    addActivity('system', { text: 'running in demo mode' });
-  } else {
-    const ok = await connectWaku();
-    if (ok) { await subscribeDefaults(); }
-    else { startDemo(); }
+  const ok = await connectWaku();
+  if (ok) { await subscribeDefaults(); }
+  else {
+    dom.pairingStatus.textContent = 'gateway offline — try again later';
+    dom.pairingStatus.className = 'pairing-status error';
+    setHealth('offline');
   }
 
   state.paired = true;
@@ -570,7 +525,7 @@ async function handlePair() {
   dom.navTabs.classList.remove('hidden');
   dom.mainContent.classList.remove('hidden');
   if (!state.channels.has('general')) state.channels.set('general', []);
-  if (code !== 'demo' && !state.channels.has(code)) state.channels.set(code, []);
+  if (!state.channels.has(code)) state.channels.set(code, []);
   renderChannelList();
 }
 
