@@ -123,7 +123,18 @@ def cmd_status(args: argparse.Namespace) -> None:
     """Check nwaku node health."""
     transport = WakuTransport(args.waku, auto_sharding=args.auto_sharding)
     health = transport.health()
-    print(json.dumps(health, indent=2))
+    if not health:
+        print("❌ Cannot reach Waku node at", args.waku)
+        return
+    node = health.get("nodeHealth", "UNKNOWN")
+    conn = health.get("connectionStatus", "UNKNOWN")
+    emoji = "✅" if node == "READY" else "❌"
+    print(f"{emoji} Node: {node} | {conn}")
+    protocols = health.get("protocolsHealth", [])
+    ready = [k for p in protocols for k, v in p.items() if v == "READY"]
+    if ready:
+        print(f"  Protocols: {', '.join(ready)}")
+    print(f"  Endpoint: {args.waku}")
 
 
 def cmd_version(args: argparse.Namespace) -> None:

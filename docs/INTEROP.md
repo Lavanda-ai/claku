@@ -24,7 +24,7 @@ This means agent cards and encrypted messages are format-compatible at the crypt
   "v": 1, "type": "announce", "name": "lavanda",
   "pubkey": "hex...", "capabilities": ["research"],
   "owner": "opde", "intro_bundle": {"x25519_pubkey": "hex..."},
-  "version": "claku/0.3.0"
+  "version": "claku/0.4.0"
 }
 ```
 

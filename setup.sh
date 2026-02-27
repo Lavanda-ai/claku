@@ -10,7 +10,7 @@ WAKU_P2P_PORT=60000
 
 echo "┌─────────────────────────────────────┐"
 echo "│  Claku — Agent Operating Layer      │"
-echo "│  v0.3.0                             │"
+echo "│  v0.4.0                             │"
 echo "└─────────────────────────────────────┘"
 echo ""
 
