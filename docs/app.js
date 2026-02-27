@@ -401,53 +401,72 @@ function routeMessage(data) {
   } catch (err) { console.warn('route error:', err); }
 }
 
-// ─── Waku Light Node ───
+// ─── Waku REST API ───
+const WAKU_REST = 'http://212.227.95.210:8645';
+let pollInterval = null;
+const seenMsgIds = new Set();
+
 async function connectWaku() {
   setHealth('connecting');
-  addActivity('system', { text: 'loading waku SDK...' });
+  addActivity('system', { text: 'connecting to Waku gateway...' });
   try {
-    const mod = await import('https://unpkg.com/@waku/sdk@0.0.31/bundle/index.js');
-    const { createLightNode, waitForRemotePeer, Protocols } = mod;
-    state.node = await createLightNode({ defaultBootstrap: true });
-    await state.node.start();
-    addActivity('system', { text: 'waiting for peers...' });
-    await waitForRemotePeer(state.node, [Protocols.Filter, Protocols.LightPush], 15000);
-    setHealth('online');
-    addActivity('system', { text: 'connected to waku network' });
-    return true;
+    const resp = await fetch(`${WAKU_REST}/health`);
+    const health = await resp.json();
+    if (health.nodeHealth === 'READY') {
+      setHealth('online');
+      addActivity('system', { text: `connected — ${health.connectionStatus}` });
+      return true;
+    }
   } catch (err) {
-    console.warn('waku failed:', err.message);
-    setHealth('offline');
-    addActivity('system', { text: 'waku unavailable — demo mode' });
-    return false;
+    console.warn('waku REST failed:', err.message);
+  }
+  setHealth('offline');
+  addActivity('system', { text: 'gateway unavailable — demo mode' });
+  return false;
+}
+
+async function storeQuery(topic) {
+  try {
+    const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent(topic)}&pageSize=20&ascending=false`;
+    const resp = await fetch(url);
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    return (data.messages || []).map(m => {
+      try { return JSON.parse(atob(m.payload)); } catch { return null; }
+    }).filter(Boolean);
+  } catch (e) { console.warn('store query error:', e); return []; }
+}
+
+async function pollTopics() {
+  const topics = [DISCOVERY_TOPIC, channelTopic('general')];
+  if (state.channelCode) topics.push(channelTopic(state.channelCode));
+  for (const topic of topics) {
+    const msgs = await storeQuery(topic);
+    for (const msg of msgs) {
+      const id = msg.msg_id || msg.pubkey || JSON.stringify(msg).slice(0, 64);
+      if (seenMsgIds.has(id)) continue;
+      seenMsgIds.add(id);
+      routeMessage(msg);
+    }
   }
 }
 
-async function subscribeTopic(topic) {
-  if (!state.node?.filter) return;
-  try {
-    const dec = state.node.createDecoder({ contentTopic: topic });
-    await state.node.filter.subscribe([dec], (msg) => {
-      if (msg.payload) routeMessage(new TextDecoder().decode(msg.payload));
-    });
-  } catch (e) { console.warn('sub error:', e); }
+function startPolling() {
+  pollTopics();
+  pollInterval = setInterval(pollTopics, 10000);
 }
 
-async function subscribeChannel(name) { await subscribeTopic(channelTopic(name)); }
-
-async function publishTopic(topic, data) {
-  if (!state.node?.lightPush) return false;
-  try {
-    const enc = state.node.createEncoder({ contentTopic: topic });
-    await state.node.lightPush.send(enc, { payload: new TextEncoder().encode(JSON.stringify(data)) });
-    return true;
-  } catch (e) { console.warn('pub error:', e); return false; }
+function stopPolling() {
+  if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
 }
+
+async function subscribeTopic(topic) { /* polling handles this */ }
+async function subscribeChannel(name) { /* polling handles this */ }
+async function publishTopic(topic, data) { return false; /* read-only for now */ }
 
 async function subscribeDefaults() {
-  await subscribeTopic(DISCOVERY_TOPIC);
-  await subscribeTopic(channelTopic('general'));
-  addActivity('system', { text: 'subscribed to discovery + #general' });
+  addActivity('system', { text: 'listening on discovery + #general' });
+  startPolling();
 }
 
 // ─── Demo Mode ───
@@ -510,21 +529,27 @@ function switchTab(name) {
 // ─── Pairing ───
 async function handlePair() {
   const code = dom.codeInput.value.trim();
-  if (!code) { dom.pairingStatus.textContent = 'enter a channel code'; dom.pairingStatus.className = 'pairing-status error'; return; }
+  if (!code) { dom.pairingStatus.textContent = 'enter a channel code or "demo"'; dom.pairingStatus.className = 'pairing-status error'; return; }
   state.channelCode = code;
   dom.pairingStatus.textContent = 'connecting...';
   dom.pairingStatus.className = 'pairing-status';
 
-  const ok = await connectWaku();
-  if (ok) { await subscribeDefaults(); await subscribeTopic(channelTopic(code)); }
-  else startDemo();
+  if (code === 'demo') {
+    startDemo();
+    setHealth('demo');
+    addActivity('system', { text: 'running in demo mode' });
+  } else {
+    const ok = await connectWaku();
+    if (ok) { await subscribeDefaults(); }
+    else { startDemo(); }
+  }
 
   state.paired = true;
   dom.pairingSection.classList.add('hidden');
   dom.navTabs.classList.remove('hidden');
   dom.mainContent.classList.remove('hidden');
   if (!state.channels.has('general')) state.channels.set('general', []);
-  if (!state.channels.has(code)) state.channels.set(code, []);
+  if (code !== 'demo' && !state.channels.has(code)) state.channels.set(code, []);
   renderChannelList();
 }
 
