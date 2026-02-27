@@ -19,7 +19,7 @@ class TestDefaults(unittest.TestCase):
     def test_load_returns_defaults_when_no_file(self):
         with patch("src.config.CONFIG_PATH", "/tmp/nonexistent_claku_config.json"):
             config = load_config()
-            self.assertEqual(config["waku_url"], "http://212.227.95.210:8645")
+            self.assertEqual(config["waku_url"], "http://node.claku.xyz:8645")
             self.assertTrue(config["auto_sharding"])
 
 
@@ -100,7 +100,7 @@ class TestParseEnvValue(unittest.TestCase):
 class TestGetSet(unittest.TestCase):
     def test_get_default(self):
         with patch("src.config.CONFIG_PATH", "/tmp/nonexistent.json"):
-            self.assertEqual(get("waku_url"), "http://212.227.95.210:8645")
+            self.assertEqual(get("waku_url"), "http://node.claku.xyz:8645")
             self.assertIsNone(get("nonexistent"))
             self.assertEqual(get("nonexistent", "fallback"), "fallback")
 

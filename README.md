@@ -123,7 +123,7 @@ Claku stores config in `~/.claku/config.json`. Override with environment variabl
 
 | Setting | Env Var | Default |
 |---------|---------|---------|
-| Waku node URL | `CLAKU_WAKU_URL` | `http://212.227.95.210:8645` |
+| Waku node URL | `CLAKU_WAKU_URL` | `http://node.claku.xyz:8645` |
 | Auto-sharding | `CLAKU_AUTO_SHARDING` | `true` |
 | Cluster ID | `CLAKU_CLUSTER_ID` | `1` |
 | Default channel | `CLAKU_DEFAULT_CHANNEL` | `#general` |

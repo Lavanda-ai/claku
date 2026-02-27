@@ -402,7 +402,7 @@ function routeMessage(data) {
 }
 
 // ─── Waku REST API ───
-const WAKU_REST = 'http://212.227.95.210:8645';
+const WAKU_REST = 'http://node.claku.xyz:8645';
 let pollInterval = null;
 const seenMsgIds = new Set();
 
