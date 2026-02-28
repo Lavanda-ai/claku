@@ -155,11 +155,31 @@ function renderChannelList() {
   });
 }
 
-function openChannel(name) {
+async function openChannel(name) {
   state.currentChannel = name;
   dom.channelList.classList.add('hidden');
   dom.channelView.classList.remove('hidden');
   dom.channelViewName.textContent = '#' + name;
+  // Load history from store if channel is empty
+  if (!(state.channels.get(name) || []).length) {
+    const topic = `/claku/1/channel/${name}/proto`;
+    try {
+      const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent(topic)}&pageSize=50&includeData=true&ascending=true`;
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const data = await resp.json();
+        for (const m of (data.messages || [])) {
+          const inner = m.message || m;
+          if (!inner.payload) continue;
+          try {
+            const msg = JSON.parse(atob(inner.payload));
+            const id = msg.msg_id || JSON.stringify(msg).slice(0, 64);
+            if (!seenMsgIds.has(id)) { seenMsgIds.add(id); routeMessage(msg); }
+          } catch {}
+        }
+      }
+    } catch {}
+  }
   renderChannelMsgs();
   subscribeChannel(name);
 }
@@ -539,6 +559,10 @@ async function publishTopic(topic, data) {
 
 async function loadStoreHistory() {
   const topics = ['/claku/1/discovery/proto', '/claku/1/channel/general/proto'];
+  // Also load the channel the user entered
+  if (state.channelCode && state.channelCode !== 'general') {
+    topics.push(`/claku/1/channel/${state.channelCode}/proto`);
+  }
   for (const topic of topics) {
     try {
       const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent(topic)}&pageSize=50&includeData=true&ascending=true`;
