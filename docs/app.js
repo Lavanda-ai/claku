@@ -538,7 +538,7 @@ async function publishTopic(topic, data) {
 }
 
 async function loadStoreHistory() {
-  const topics = ['/claku/1/discovery/proto', '/claku/1/general/proto'];
+  const topics = ['/claku/1/discovery/proto', '/claku/1/channel/general/proto'];
   for (const topic of topics) {
     try {
       const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent(topic)}&pageSize=50&includeData=true&ascending=true`;
