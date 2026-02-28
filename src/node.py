@@ -112,7 +112,7 @@ class ClakuNode:
         name: str,
         owner: str,
         capabilities: list[str],
-        waku_url: str = "http://localhost:8645",
+        waku_url: str = "https://node.claku.xyz",
         force: bool = False,
         auto_sharding: bool = False,
     ) -> None:
@@ -197,22 +197,39 @@ class ClakuNode:
     def discover(self) -> list[dict]:
         """Poll the discovery topic for other agents' cards.
 
+        Checks both relay (live) and store (historical) for agent cards.
+
         Returns:
             List of agent card dicts from other agents (excludes self).
         """
-        messages = self.transport.poll_json(DISCOVERY_TOPIC)
         agents: list[dict] = []
+        seen: set[str] = set()
+
+        # Try store for historical cards first
+        try:
+            stored = self.transport.store_query_json([DISCOVERY_TOPIC])
+            for msg in stored:
+                pk = msg.get("pubkey", "")
+                if msg.get("type") == "agent_card" and pk and pk != self.identity["pubkey"] and pk not in seen:
+                    seen.add(pk)
+                    self.known_agents[pk] = msg
+                    agents.append(msg)
+        except Exception:
+            pass
+
+        # Then check relay for live cards
+        messages = self.transport.poll_json(DISCOVERY_TOPIC)
         for msg in messages:
-            if (
-                msg.get("type") == "agent_card"
-                and msg.get("pubkey") != self.identity["pubkey"]
-            ):
-                self.known_agents[msg["pubkey"]] = msg
+            pk = msg.get("pubkey", "")
+            if msg.get("type") == "agent_card" and pk and pk != self.identity["pubkey"] and pk not in seen:
+                seen.add(pk)
+                self.known_agents[pk] = msg
                 agents.append(msg)
                 self._log_dashboard("discovered", {
                     "remote_agent": msg["name"],
-                    "pubkey": msg["pubkey"][:16] + "...",
+                    "pubkey": pk[:16] + "...",
                 })
+
         return agents
 
     # ── Channels ──────────────────────────────────────────────────────────
@@ -280,6 +297,7 @@ class ClakuNode:
     def poll_channel(self, channel: str) -> list[dict]:
         """Poll a channel for messages, verifying Ed25519 signatures.
 
+        Checks both store (historical) and relay (live) for messages.
         Each message is augmented with a ``_verified`` boolean indicating
         whether the signature check passed.
 
@@ -291,12 +309,33 @@ class ClakuNode:
         """
         channel = self._normalize_channel(channel)
         topic = CHANNEL_TOPIC(channel.lstrip("#"))
-        messages = self.transport.poll_json(topic)
-        verified: list[dict] = []
+        seen_ids: set[str] = set()
+        all_msgs: list[dict] = []
 
+        # Store history first
+        try:
+            stored = self.transport.store_query_json([topic])
+            for msg in stored:
+                if msg.get("type") == "channel_msg":
+                    mid = msg.get("msg_id", "")
+                    if mid and mid not in seen_ids:
+                        seen_ids.add(mid)
+                        all_msgs.append(msg)
+        except Exception:
+            pass
+
+        # Then relay for live messages
+        messages = self.transport.poll_json(topic)
         for msg in messages:
-            if msg.get("type") != "channel_msg":
-                continue
+            if msg.get("type") == "channel_msg":
+                mid = msg.get("msg_id", "")
+                if mid and mid not in seen_ids:
+                    seen_ids.add(mid)
+                    all_msgs.append(msg)
+
+        # Verify signatures
+        verified: list[dict] = []
+        for msg in all_msgs:
 
             sig = msg.get("signature")
             pubkey_hex = msg.get("from_pubkey", "")

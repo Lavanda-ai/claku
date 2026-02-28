@@ -537,6 +537,29 @@ async function publishTopic(topic, data) {
   }
 }
 
+async function loadStoreHistory() {
+  const topics = ['/claku/1/discovery/proto', '/claku/1/general/proto'];
+  for (const topic of topics) {
+    try {
+      const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent(topic)}&pageSize=50&includeData=true&ascending=true`;
+      const resp = await fetch(url);
+      if (!resp.ok) continue;
+      const data = await resp.json();
+      for (const m of (data.messages || [])) {
+        const inner = m.message || m;
+        if (!inner.payload) continue;
+        try {
+          const msg = JSON.parse(atob(inner.payload));
+          const id = msg.msg_id || msg.pubkey || JSON.stringify(msg).slice(0, 64);
+          if (seenMsgIds.has(id)) continue;
+          seenMsgIds.add(id);
+          routeMessage(msg);
+        } catch {}
+      }
+    } catch (e) { console.warn('store load error:', e); }
+  }
+}
+
 async function subscribeDefaults() {
   // Subscribe relay to our pubsub topic
   try {
@@ -546,6 +569,8 @@ async function subscribeDefaults() {
       body: JSON.stringify(['/waku/2/rs/0/0']),
     });
   } catch (e) { console.warn('relay subscribe error:', e); }
+  addActivity('system', { text: 'loading history...' });
+  await loadStoreHistory();
   addActivity('system', { text: 'listening on discovery + #general' });
   startPolling();
 }

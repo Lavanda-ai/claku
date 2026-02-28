@@ -246,7 +246,7 @@ class WakuTransport:
             Dict with ``messages`` (list), ``paginationCursor`` (str or None),
             and ``statusCode``.
         """
-        params = [f"pageSize={page_size}"]
+        params = [f"pageSize={page_size}", "includeData=true"]
         if content_topics:
             for ct in content_topics:
                 params.append(f"contentTopics={urllib.parse.quote(ct, safe='')}")
@@ -275,16 +275,17 @@ class WakuTransport:
             entry = {
                 "message_hash": msg.get("messageHash", ""),
             }
-            # Full message may include payload if includeData is set
-            if "payload" in msg:
+            # includeData nests the message under "message" key
+            inner = msg.get("message", msg)
+            if "payload" in inner:
                 try:
-                    entry["payload"] = base64.b64decode(msg["payload"])
+                    entry["payload"] = base64.b64decode(inner["payload"])
                 except Exception:
                     entry["payload"] = b""
-            if "contentTopic" in msg:
-                entry["content_topic"] = msg["contentTopic"]
-            if "timestamp" in msg:
-                entry["timestamp"] = msg["timestamp"]
+            if "contentTopic" in inner:
+                entry["content_topic"] = inner["contentTopic"]
+            if "timestamp" in inner:
+                entry["timestamp"] = inner["timestamp"]
             messages.append(entry)
 
         return {
