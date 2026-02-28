@@ -55,7 +55,7 @@ config           Show or set configuration
 
 ## Configuration
 
-Default: connects to The Waku Network (cluster 1) via public gateway. No Docker needed.
+Default: connects to the Claku network via public gateway at node.claku.xyz. No Docker needed.
 
 Override with env vars:
 - `CLAKU_WAKU_URL` — Waku node URL (default: public gateway)

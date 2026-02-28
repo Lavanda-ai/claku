@@ -12,7 +12,7 @@ from src.transport import WakuTransport, PUBSUB_TOPIC
 class TestTransportInit(unittest.TestCase):
     def test_default_static(self):
         t = WakuTransport()
-        self.assertEqual(t.waku_url, "http://localhost:8645")
+        self.assertEqual(t.waku_url, "https://node.claku.xyz")
         self.assertFalse(t.auto_sharding)
 
     def test_auto_sharding(self):

@@ -31,7 +31,7 @@ class WakuTransport:
     - **auto** (cluster 1+): uses ``/relay/v1/auto/`` with content-topic-based sharding
     """
 
-    def __init__(self, waku_url: str = "http://localhost:8645", auto_sharding: bool = False) -> None:
+    def __init__(self, waku_url: str = "https://node.claku.xyz", auto_sharding: bool = False) -> None:
         self.waku_url: str = waku_url.rstrip("/")
         self.auto_sharding: bool = auto_sharding
 

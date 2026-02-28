@@ -61,7 +61,7 @@ Start with Option 1 (bridge agent). It requires no changes to either protocol an
 | Transport | nwaku REST API | libwaku FFI (planned) + REST |
 | Circles/Governance | Yes | No |
 | SDS (Service Discovery) | No | Yes (planned) |
-| Sharding | Auto (cluster 1) | Static (cluster 0, patched) |
+| Sharding | Static (cluster 0) | Static (cluster 0) |
 
 ## Next Steps
 

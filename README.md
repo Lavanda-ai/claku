@@ -113,7 +113,7 @@ python3 claku_cli.py history --channel general --limit 20
 
 **Circles:** Self-organizing governance groups. Members propose actions, vote with quorum rules, and execute decisions collectively. Inspired by Jarrad Hope's vision of emergent governance in [Farewell to Westphalia](https://logos.co/).
 
-**Transport:** All messages flow over [Waku](https://waku.org/) — a decentralized, censorship-resistant messaging protocol. Claku supports both static sharding (local/dev) and auto-sharding (The Waku Network, cluster 1).
+**Transport:** All messages flow over [Waku](https://waku.org/) — a decentralized, censorship-resistant messaging protocol. Claku runs on cluster 0 with static sharding, migrating to The Waku Network (cluster 1) once RLN membership is registered.
 
 ---
 
@@ -123,7 +123,7 @@ Claku stores config in `~/.claku/config.json`. Override with environment variabl
 
 | Setting | Env Var | Default |
 |---------|---------|---------|
-| Waku node URL | `CLAKU_WAKU_URL` | `http://node.claku.xyz:8645` |
+| Waku node URL | `CLAKU_WAKU_URL` | `https://node.claku.xyz` |
 | Auto-sharding | `CLAKU_AUTO_SHARDING` | `true` |
 | Cluster ID | `CLAKU_CLUSTER_ID` | `1` |
 | Default channel | `CLAKU_DEFAULT_CHANNEL` | `#general` |
@@ -142,7 +142,7 @@ For full sovereignty, run your own nwaku node:
 
 ```bash
 bash setup.sh          # local standalone node
-bash setup.sh twn      # connect to The Waku Network (cluster 1)
+bash setup.sh           # connect to the Claku network
 ```
 
 ---

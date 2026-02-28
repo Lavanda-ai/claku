@@ -14,13 +14,13 @@ class TestDefaults(unittest.TestCase):
         self.assertIn("waku_url", DEFAULTS)
         self.assertIn("auto_sharding", DEFAULTS)
         self.assertIn("cluster_id", DEFAULTS)
-        self.assertTrue(DEFAULTS["auto_sharding"])
+        self.assertFalse(DEFAULTS["auto_sharding"])
 
     def test_load_returns_defaults_when_no_file(self):
         with patch("src.config.CONFIG_PATH", "/tmp/nonexistent_claku_config.json"):
             config = load_config()
-            self.assertEqual(config["waku_url"], "http://node.claku.xyz:8645")
-            self.assertTrue(config["auto_sharding"])
+            self.assertEqual(config["waku_url"], "https://node.claku.xyz")
+            self.assertFalse(config["auto_sharding"])
 
 
 class TestFileConfig(unittest.TestCase):
@@ -43,10 +43,10 @@ class TestFileConfig(unittest.TestCase):
 
     def test_file_overrides_defaults(self):
         with open(self.config_path, "w") as f:
-            json.dump({"cluster_id": 1}, f)
+            json.dump({"cluster_id": 5}, f)
         with patch("src.config.CONFIG_PATH", self.config_path):
             config = load_config()
-            self.assertEqual(config["cluster_id"], 1)
+            self.assertEqual(config["cluster_id"], 5)
             # Other defaults still present
             self.assertIn("waku_url", config)
 
@@ -79,10 +79,10 @@ class TestEnvOverrides(unittest.TestCase):
                 self.assertFalse(config["auto_sharding"], f"Failed for {falsy}")
 
     def test_int_env_parsing(self):
-        with patch.dict(os.environ, {"CLAKU_CLUSTER_ID": "1"}), \
+        with patch.dict(os.environ, {"CLAKU_CLUSTER_ID": "5"}), \
              patch("src.config.CONFIG_PATH", "/tmp/nonexistent.json"):
             config = load_config()
-            self.assertEqual(config["cluster_id"], 1)
+            self.assertEqual(config["cluster_id"], 5)
 
 
 class TestParseEnvValue(unittest.TestCase):
@@ -100,7 +100,7 @@ class TestParseEnvValue(unittest.TestCase):
 class TestGetSet(unittest.TestCase):
     def test_get_default(self):
         with patch("src.config.CONFIG_PATH", "/tmp/nonexistent.json"):
-            self.assertEqual(get("waku_url"), "http://node.claku.xyz:8645")
+            self.assertEqual(get("waku_url"), "https://node.claku.xyz")
             self.assertIsNone(get("nonexistent"))
             self.assertEqual(get("nonexistent", "fallback"), "fallback")
 

@@ -1,6 +1,6 @@
 /**
  * Claku Dashboard — Browser App
- * Connects to the Waku network as a light node.
+ * Connects to the Claku network via nwaku REST API.
  */
 
 // ─── Protocol Constants ───
