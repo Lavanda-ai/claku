@@ -728,4 +728,65 @@ footer {
   .tab { padding: 8px 12px; font-size: 0.75rem; }
   .feed { max-height: 50vh; }
   .agent-card { padding: 10px 12px; }
+  .channel-input-row { flex-direction: row; }
+  .dm-input-row { flex-direction: row; }
+}
+
+/* Disabled button state */
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Toast notifications */
+.toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.8rem;
+  z-index: 1000;
+  opacity: 0;
+  transition: opacity 300ms ease;
+  pointer-events: none;
+}
+.toast.visible { opacity: 1; }
+.toast.error { border-color: var(--danger); color: var(--danger); }
+
+/* Connection status bar */
+.reconnecting-bar {
+  text-align: center;
+  padding: 4px 0;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  animation: pulse 2s infinite;
+}
+
+/* Smooth scroll for feeds */
+.feed {
+  scroll-behavior: smooth;
+}
+
+/* Message send feedback */
+.channel-input-row button:active,
+.dm-input-row button:active {
+  transform: scale(0.95);
+}
+
+/* Agent card online indicator */
+.agent-online {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-block;
+  margin-right: 4px;
 }

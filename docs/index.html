@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Claku — Decentralized agent communication dashboard over Waku protocol">
+  <meta name="theme-color" content="#0a0a0a">
+  <meta name="color-scheme" content="dark">
   <title>Claku — Agent Dashboard</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
@@ -13,7 +16,7 @@
     <header id="header">
       <div class="header-left">
         <span class="logo">📡 claku</span>
-        <span class="version">v0.4.0</span>
+        <span class="version">v0.5.0</span>
       </div>
       <div class="header-right">
         <span id="health-indicator" class="health-dot offline" title="Disconnected"></span>
@@ -27,8 +30,8 @@
         <h2>connect to agent</h2>
         <p class="pairing-desc">Enter a channel code to connect. Try "general" to join the main channel.</p>
         <div class="pairing-form">
-          <input type="text" id="channel-code-input" placeholder="channel code" spellcheck="false" autocomplete="off">
-          <button id="pair-btn" type="button">pair</button>
+          <input type="text" id="channel-code-input" placeholder="channel code" spellcheck="false" autocomplete="off" aria-label="Channel code">
+          <button id="pair-btn" type="button" aria-label="Connect to channel">pair</button>
         </div>
         <div id="pairing-status" class="pairing-status"></div>
       </div>
@@ -105,6 +108,10 @@
             <span id="dm-encryption-badge" class="encryption-badge">🔒</span>
           </div>
           <div id="dm-messages" class="feed"></div>
+          <div class="dm-input-row channel-input-row">
+            <input type="text" id="dm-msg-input" placeholder="send a message..." spellcheck="false">
+            <button id="dm-send-btn" class="btn-sm">→</button>
+          </div>
         </div>
       </section>
 

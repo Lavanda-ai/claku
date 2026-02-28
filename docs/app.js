@@ -49,6 +49,8 @@ const dom = {
   dmPeerName: $('#dm-peer-name'),
   dmEncBadge: $('#dm-encryption-badge'),
   dmMessages: $('#dm-messages'),
+  dmMsgInput: $('#dm-msg-input'),
+  dmSendBtn: $('#dm-send-btn'),
   backToDms: $('#back-to-dms'),
   circleCount: $('#circle-count'),
   circleList: $('#circle-list'),
@@ -402,40 +404,67 @@ function routeMessage(data) {
 }
 
 // ─── Waku REST API ───
-const WAKU_REST = 'http://node.claku.xyz:8645';
+const WAKU_REST = 'https://node.claku.xyz';
 let pollInterval = null;
+let reconnectTimer = null;
 const seenMsgIds = new Set();
 
 async function connectWaku() {
   setHealth('connecting');
   addActivity('system', { text: 'connecting to Waku gateway...' });
   try {
-    const resp = await fetch(`${WAKU_REST}/health`);
+    const resp = await fetch(`${WAKU_REST}/health`, { signal: AbortSignal.timeout(8000) });
     const health = await resp.json();
     if (health.nodeHealth === 'READY') {
       setHealth('online');
-      addActivity('system', { text: `connected — ${health.connectionStatus}` });
+      const peerStatus = health.connectionStatus || 'unknown';
+      const relayHealth = (health.protocolsHealth || []).find(p => p.Relay)?.Relay || '?';
+      addActivity('system', { text: `connected — peers: ${peerStatus}, relay: ${relayHealth}` });
       return true;
     }
+    setHealth('offline');
+    addActivity('system', { text: `node not ready: ${health.nodeHealth}` });
+    return false;
   } catch (err) {
     console.warn('waku REST failed:', err.message);
   }
   setHealth('offline');
-  addActivity('system', { text: 'gateway unavailable — demo mode' });
+  addActivity('system', { text: 'gateway unavailable — will retry in 30s' });
+  scheduleReconnect();
   return false;
 }
 
-const PUBSUB_ENCODED = encodeURIComponent('/waku/2/rs/0/0');
+function scheduleReconnect() {
+  if (reconnectTimer) return;
+  reconnectTimer = setTimeout(async () => {
+    reconnectTimer = null;
+    const ok = await connectWaku();
+    if (ok) { await subscribeDefaults(); }
+  }, 30000);
+}
+
+const PUBSUB_ENCODED = encodeURIComponent('/waku/2/rs/1/0');
 
 async function relayPoll() {
   try {
-    const resp = await fetch(`${WAKU_REST}/relay/v1/messages/${PUBSUB_ENCODED}`);
+    const resp = await fetch(`${WAKU_REST}/relay/v1/messages/${PUBSUB_ENCODED}`, { signal: AbortSignal.timeout(10000) });
     if (!resp.ok) return [];
     const data = await resp.json();
+    if (dom.healthDot.className.includes('offline')) {
+      setHealth('online');
+      addActivity('system', { text: 'reconnected to gateway' });
+    }
     return data.map(m => {
       try { return JSON.parse(atob(m.payload)); } catch { return null; }
     }).filter(Boolean);
-  } catch (e) { console.warn('relay poll error:', e); return []; }
+  } catch (e) {
+    console.warn('relay poll error:', e);
+    if (!dom.healthDot.className.includes('offline')) {
+      setHealth('offline');
+      addActivity('system', { text: 'connection lost — retrying...' });
+    }
+    return [];
+  }
 }
 
 async function pollTopics() {
@@ -446,11 +475,33 @@ async function pollTopics() {
     seenMsgIds.add(id);
     routeMessage(msg);
   }
+  // Prevent unbounded memory growth
+  if (seenMsgIds.size > 5000) {
+    const arr = Array.from(seenMsgIds);
+    arr.splice(0, arr.length - 2000);
+    seenMsgIds.clear();
+    arr.forEach(id => seenMsgIds.add(id));
+  }
 }
 
 function startPolling() {
   pollTopics();
   pollInterval = setInterval(pollTopics, 10000);
+  // Periodic health check every 2 minutes
+  setInterval(async () => {
+    try {
+      const resp = await fetch(`${WAKU_REST}/health`, { signal: AbortSignal.timeout(5000) });
+      const h = await resp.json();
+      if (h.nodeHealth === 'READY') {
+        if (dom.healthDot.className.includes('offline')) {
+          setHealth('online');
+          addActivity('system', { text: 'reconnected to gateway' });
+        }
+      } else {
+        setHealth('offline');
+      }
+    } catch { setHealth('offline'); }
+  }, 120000);
 }
 
 function stopPolling() {
@@ -472,9 +523,18 @@ async function publishTopic(topic, data) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10000),
     });
-    return resp.ok;
-  } catch (e) { console.warn('publish error:', e); return false; }
+    if (!resp.ok) {
+      addActivity('error', { text: `publish failed: ${resp.status} ${resp.statusText}` });
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('publish error:', e);
+    addActivity('error', { text: `publish failed: ${e.message}` });
+    return false;
+  }
 }
 
 async function subscribeDefaults() {
@@ -483,7 +543,7 @@ async function subscribeDefaults() {
     await fetch(`${WAKU_REST}/relay/v1/subscriptions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(['/waku/2/rs/0/0']),
+      body: JSON.stringify(['/waku/2/rs/1/0']),
     });
   } catch (e) { console.warn('relay subscribe error:', e); }
   addActivity('system', { text: 'listening on discovery + #general' });
@@ -491,9 +551,7 @@ async function subscribeDefaults() {
 }
 
 // ─── Demo Mode ───
-function startDemo() {
-  addActivity('system', { text: 'offline — showing empty state. connect to a live node to see agents.' });
-}
+// (removed — offline mode handled by reconnect logic)
 
 // ─── Tab Navigation ───
 function switchTab(name) {
@@ -511,22 +569,25 @@ async function handlePair() {
   state.channelCode = code;
   dom.pairingStatus.textContent = 'connecting...';
   dom.pairingStatus.className = 'pairing-status';
+  dom.pairBtn.disabled = true;
 
   const ok = await connectWaku();
-  if (ok) { await subscribeDefaults(); }
-  else {
-    dom.pairingStatus.textContent = 'gateway offline — try again later';
-    dom.pairingStatus.className = 'pairing-status error';
-    setHealth('offline');
-  }
 
   state.paired = true;
   dom.pairingSection.classList.add('hidden');
   dom.navTabs.classList.remove('hidden');
   dom.mainContent.classList.remove('hidden');
   if (!state.channels.has('general')) state.channels.set('general', []);
-  if (!state.channels.has(code)) state.channels.set(code, []);
+  if (code !== 'general' && !state.channels.has(code)) state.channels.set(code, []);
   renderChannelList();
+
+  if (ok) {
+    await subscribeDefaults();
+    dom.pairingStatus.textContent = '';
+  } else {
+    addActivity('system', { text: 'offline mode — will auto-reconnect when gateway is available' });
+  }
+  dom.pairBtn.disabled = false;
 }
 
 // ─── Send Channel Message ───
@@ -538,9 +599,24 @@ async function sendChannelMsg() {
     from_pubkey:'browser', text, msg_id: crypto.randomUUID?.() || ''+Date.now(),
     ts: nowTs(), _verified:false,
   };
-  await publishTopic(channelTopic(state.currentChannel), msg);
-  routeMessage(msg);
+  const ok = await publishTopic(channelTopic(state.currentChannel), msg);
+  if (ok) routeMessage(msg);
   dom.channelMsgInput.value = '';
+}
+
+// ─── Send DM ───
+async function sendDm() {
+  const text = dom.dmMsgInput.value.trim();
+  if (!text || !state.currentDmPeer) return;
+  const msg = {
+    type:'dm', from:'dashboard', from_pubkey:'browser',
+    to_pubkey: state.currentDmPeer, text,
+    msg_id: crypto.randomUUID?.() || ''+Date.now(),
+    ts: nowTs(), encrypted: false,
+  };
+  const ok = await publishTopic(dmTopic(state.currentDmPeer), msg);
+  if (ok) routeMessage(msg);
+  dom.dmMsgInput.value = '';
 }
 
 // ─── Init ───
@@ -553,6 +629,8 @@ function init() {
   dom.channelSendBtn.addEventListener('click', sendChannelMsg);
   dom.channelMsgInput.addEventListener('keydown', e => { if (e.key==='Enter') sendChannelMsg(); });
   dom.backToDms.addEventListener('click', closeDm);
+  dom.dmSendBtn.addEventListener('click', sendDm);
+  dom.dmMsgInput.addEventListener('keydown', e => { if (e.key==='Enter') sendDm(); });
   dom.backToCircles.addEventListener('click', closeCircle);
   dom.createCircleBtn.addEventListener('click', showCreateCircleForm);
   dom.cancelCreateCircle.addEventListener('click', hideCreateCircleForm);
