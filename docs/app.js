@@ -443,7 +443,7 @@ function scheduleReconnect() {
   }, 30000);
 }
 
-const PUBSUB_ENCODED = encodeURIComponent('/waku/2/rs/1/0');
+const PUBSUB_ENCODED = encodeURIComponent('/waku/2/rs/0/0');
 
 async function relayPoll() {
   try {
@@ -543,7 +543,7 @@ async function subscribeDefaults() {
     await fetch(`${WAKU_REST}/relay/v1/subscriptions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(['/waku/2/rs/1/0']),
+      body: JSON.stringify(['/waku/2/rs/0/0']),
     });
   } catch (e) { console.warn('relay subscribe error:', e); }
   addActivity('system', { text: 'listening on discovery + #general' });

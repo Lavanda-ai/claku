@@ -16,7 +16,7 @@ CONFIG_PATH = os.path.join(CONFIG_DIR, "config.json")
 DEFAULTS = {
     "waku_url": "https://node.claku.xyz",
     "auto_sharding": True,
-    "cluster_id": 1,
+    "cluster_id": 0,
     "default_channel": "#general",
     "dashboard_log": os.path.join(CONFIG_DIR, "dashboard.jsonl"),
 }
