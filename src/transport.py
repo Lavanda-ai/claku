@@ -13,8 +13,8 @@ import urllib.parse
 import urllib.request
 from typing import Optional
 
-#: Default pubsub topic for Waku static sharding (cluster 0, shard 0).
-PUBSUB_TOPIC: str = "/waku/2/rs/0/0"
+#: Default pubsub topic for Waku static sharding (cluster 1, shard 0).
+PUBSUB_TOPIC: str = "/waku/2/rs/1/0"
 
 #: HTTP request timeout in seconds.
 REQUEST_TIMEOUT: int = 10

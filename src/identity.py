@@ -75,10 +75,10 @@ def CIRCLE_VOTE_TOPIC(name: str) -> str:
 
 
 #: Default pubsub topic for Waku static sharding.
-PUBSUB_TOPIC: str = "/waku/2/rs/0/0"
+PUBSUB_TOPIC: str = "/waku/2/rs/1/0"
 
 #: Current protocol version string.
-VERSION: str = "claku/0.4.0"
+VERSION: str = "claku/0.5.0"
 
 
 def ensure_dir() -> None:

@@ -14,7 +14,7 @@ CONFIG_DIR = os.path.expanduser("~/.claku")
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.json")
 
 DEFAULTS = {
-    "waku_url": "http://node.claku.xyz:8645",
+    "waku_url": "https://node.claku.xyz",
     "auto_sharding": True,
     "cluster_id": 1,
     "default_channel": "#general",
