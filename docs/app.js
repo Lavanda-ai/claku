@@ -339,7 +339,7 @@ function renderAgents() {
         </div>
       `;
     }
-    console.log('Agent:', a.name, 'actionsHtml length:', actionsHtml.length);
+    console.log('Agent:', a.name, 'actionsHtml length:', actionsHtml.length, 'sample:', actionsHtml.slice(0, 100));
 
     return `
     <div class="agent-card ${blocked} ${inactive}" data-pubkey="${esc(a.pubkey)}">
