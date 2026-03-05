@@ -286,6 +286,26 @@ def cmd_identity(args: argparse.Namespace) -> None:
     print(json.dumps(safe, indent=2))
 
 
+def cmd_claim_challenge(args: argparse.Namespace) -> None:
+    """Sign a challenge string to prove ownership of this agent."""
+    identity = _require_identity()
+    challenge = args.challenge
+    if not challenge:
+        print("✖ Challenge cannot be empty")
+        sys.exit(1)
+
+    # Sign the challenge using the agent's Ed25519 private key
+    from src.crypto import sign_message, hex_to_bytes
+    try:
+        secret_hex = identity["secret"]
+        secret_bytes = hex_to_bytes(secret_hex)
+        signature = sign_message(challenge.encode("utf-8"), secret_bytes)
+        print(signature)
+    except Exception as e:
+        print(f"✖ Failed to sign: {e}")
+        sys.exit(1)
+
+
 # ── Circle Commands ───────────────────────────────────────────────────────
 
 
@@ -507,6 +527,10 @@ def main() -> None:
 
     sub.add_parser("identity", help="Show agent identity (public info)")
 
+    # claim-challenge
+    p_cc = sub.add_parser("claim-challenge", help="Sign a challenge to prove agent ownership")
+    p_cc.add_argument("challenge", help="Challenge string to sign (from dashboard)")
+
     # circle-create
     p_cc = sub.add_parser("circle-create", help="Create a new Circle")
     p_cc.add_argument("--name", required=True, help="Circle name (lowercase, no spaces)")
@@ -557,6 +581,7 @@ def main() -> None:
         "history": cmd_history,
         "dashboard": cmd_dashboard,
         "identity": cmd_identity,
+        "claim-challenge": cmd_claim_challenge,
         "circle-create": cmd_circle_create,
         "circle-join": cmd_circle_join,
         "circle-leave": cmd_circle_leave,
