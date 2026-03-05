@@ -289,8 +289,8 @@ def cmd_identity(args: argparse.Namespace) -> None:
 def cmd_claim_challenge(args: argparse.Namespace) -> None:
     """Sign a challenge string to prove ownership of this agent."""
     identity = _require_identity()
-    challenge = args.challenge
-    if not challenge:
+    challenge_hex = args.challenge
+    if not challenge_hex:
         print("✖ Challenge cannot be empty")
         sys.exit(1)
 
@@ -299,7 +299,9 @@ def cmd_claim_challenge(args: argparse.Namespace) -> None:
     try:
         secret_hex = identity["secret"]
         secret_bytes = hex_to_bytes(secret_hex)
-        signature = sign_message(challenge.encode("utf-8"), secret_bytes)
+        # Decode hex challenge to raw bytes
+        challenge_bytes = hex_to_bytes(challenge_hex)
+        signature = sign_message(challenge_bytes, secret_bytes)
         print(signature)
     except Exception as e:
         print(f"✖ Failed to sign: {e}")
