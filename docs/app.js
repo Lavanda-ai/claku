@@ -145,11 +145,14 @@ function getClaimedAgent(pubkey) {
   return state.claimedAgents.find(a => a.pubkey === pubkey);
 }
 
-async function verifyEd25519Signature(pubkeyHex, message, signatureB64) {
-  console.log('verifyEd25519Signature called with:', { pubkeyHex: pubkeyHex.slice(0, 16), message, signatureB64: signatureB64.slice(0, 20) });
+async function verifyEd25519Signature(pubkeyHex, messageHex, signatureB64) {
+  console.log('verifyEd25519Signature called with:', { pubkeyHex: pubkeyHex.slice(0, 16), messageHex, signatureB64: signatureB64.slice(0, 20) });
   try {
+    // Decode hex pubkey to bytes
     const pubkeyBytes = new Uint8Array(hexToBytes(pubkeyHex));
-    const msgBytes = new TextEncoder().encode(message);
+    // Decode hex message (challenge) to raw bytes
+    const msgBytes = new Uint8Array(hexToBytes(messageHex));
+    // Decode base64 signature to bytes
     const sigBytes = new Uint8Array(base64ToBytes(signatureB64));
 
     console.log('Converted to bytes:', { pubkeyLen: pubkeyBytes.length, msgLen: msgBytes.length, sigLen: sigBytes.length });
