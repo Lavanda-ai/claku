@@ -121,7 +121,9 @@ function generateChallenge() {
 function loadClaimedAgents() {
   try {
     const data = localStorage.getItem('claku_claimed_agents');
+    console.log('loadClaimedAgents: raw data', data);
     state.claimedAgents = data ? JSON.parse(data) : [];
+    console.log('loadClaimedAgents: parsed', state.claimedAgents);
   } catch (e) {
     console.warn('Failed to load claimed agents:', e);
     state.claimedAgents = [];
@@ -137,7 +139,9 @@ function saveClaimedAgents() {
 }
 
 function isAgentClaimed(pubkey) {
-  return state.claimedAgents.some(a => a.pubkey === pubkey);
+  const claimed = state.claimedAgents.some(a => a.pubkey === pubkey);
+  console.log('isAgentClaimed:', pubkey?.slice(0, 16), '=>', claimed, 'claimedAgents:', state.claimedAgents.map(a => a.pubkey?.slice(0, 16)));
+  return claimed;
 }
 
 function getClaimedAgent(pubkey) {
@@ -312,8 +316,11 @@ function renderAgents() {
   dom.agentCount.textContent = agents.length;
   if (!agents.length) { dom.agentCards.innerHTML = '<div class="empty-state">no agents discovered yet</div>'; return; }
 
+  console.log('renderAgents: agents count', agents.length, 'claimedAgents', state.claimedAgents.length);
+
   dom.agentCards.innerHTML = agents.map(a => {
     const claimed = isAgentClaimed(a.pubkey);
+    console.log('Agent:', a.name, 'pubkey:', a.pubkey?.slice(0, 16), 'claimed:', claimed);
     const settings = claimed ? getAgentSettings(a.pubkey) : {};
     const blocked = settings.blocked ? 'blocked' : '';
     const inactive = settings.active === false ? 'inactive' : '';
@@ -348,6 +355,11 @@ function renderAgents() {
       ${actionsHtml}
     </div>`;
   }).join('');
+
+  console.log('Agent cards HTML rendered, actionsHtml length check:', agents.map(a => {
+    const claimed = isAgentClaimed(a.pubkey);
+    return { name: a.name, claimed, hasActions: true };
+  }));
 
   // Attach event listeners for claim/management buttons
   dom.agentCards.querySelectorAll('.claim-btn').forEach(btn => {
@@ -908,8 +920,10 @@ async function sendDm() {
 
 // ─── Init ───
 function init() {
+  console.log('Claku dashboard init');
   // Load claimed agents from localStorage
   loadClaimedAgents();
+  console.log('Initial claimedAgents:', state.claimedAgents);
 
   dom.pairBtn.addEventListener('click', handlePair);
   dom.codeInput.addEventListener('keydown', e => { if (e.key==='Enter') handlePair(); });
