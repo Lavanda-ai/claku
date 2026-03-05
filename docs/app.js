@@ -320,7 +320,6 @@ function renderAgents() {
 
   dom.agentCards.innerHTML = agents.map(a => {
     const claimed = isAgentClaimed(a.pubkey);
-    console.log('Agent:', a.name, 'pubkey:', a.pubkey?.slice(0, 16), 'claimed:', claimed);
     const settings = claimed ? getAgentSettings(a.pubkey) : {};
     const blocked = settings.blocked ? 'blocked' : '';
     const inactive = settings.active === false ? 'inactive' : '';
@@ -340,6 +339,7 @@ function renderAgents() {
         </div>
       `;
     }
+    console.log('Agent:', a.name, 'actionsHtml length:', actionsHtml.length);
 
     return `
     <div class="agent-card ${blocked} ${inactive}" data-pubkey="${esc(a.pubkey)}">
@@ -389,6 +389,7 @@ function renderAgents() {
       }
     });
   });
+  console.log('Agent cards HTML rendered, checking for claim-btn:', dom.agentCards.querySelectorAll('.claim-btn').length, 'manage-btn:', dom.agentCards.querySelectorAll('.manage-btn').length);
 }
 
 // ─── Channels ───
