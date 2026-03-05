@@ -927,6 +927,14 @@ async function sendDm() {
 // ─── Init ───
 function init() {
   console.log('Claku dashboard init');
+  // Verify DOM elements exist
+  console.log('DOM elements:', {
+    agentCards: dom.agentCards,
+    claimModal: dom.claimModal,
+    agentManagement: dom.agentManagement,
+    claimBtnClass: document.querySelector('.claim-btn'),
+    manageBtnClass: document.querySelector('.manage-btn')
+  });
   // Load claimed agents from localStorage
   loadClaimedAgents();
   console.log('Initial claimedAgents:', state.claimedAgents);
