@@ -670,11 +670,15 @@ let reconnectTimer = null;
 const seenMsgIds = new Set();
 
 async function connectWaku() {
+  console.log('connectWaku called, WAKU_REST:', WAKU_REST);
   setHealth('connecting');
   addActivity('system', { text: 'connecting to Waku gateway...' });
   try {
+    console.log('Fetching health endpoint...');
     const resp = await fetch(`${WAKU_REST}/health`, { signal: AbortSignal.timeout(8000) });
+    console.log('Health response status:', resp.status, 'ok:', resp.ok);
     const health = await resp.json();
+    console.log('Health data:', health);
     if (health.nodeHealth === 'READY') {
       setHealth('online');
       const peerStatus = health.connectionStatus || 'unknown';
@@ -853,6 +857,7 @@ function switchTab(name) {
 
 // ─── Pairing ───
 async function handlePair() {
+  console.log('handlePair called, code:', dom.codeInput.value.trim());
   const code = dom.codeInput.value.trim();
   if (!code) { dom.pairingStatus.textContent = 'enter a channel code'; dom.pairingStatus.className = 'pairing-status error'; return; }
   state.channelCode = code;
@@ -861,6 +866,7 @@ async function handlePair() {
   dom.pairBtn.disabled = true;
 
   const ok = await connectWaku();
+  console.log('connectWaku result:', ok);
 
   state.paired = true;
   dom.pairingSection.classList.add('hidden');
