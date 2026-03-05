@@ -121,9 +121,7 @@ function generateChallenge() {
 function loadClaimedAgents() {
   try {
     const data = localStorage.getItem('claku_claimed_agents');
-    console.log('loadClaimedAgents: raw data', data);
     state.claimedAgents = data ? JSON.parse(data) : [];
-    console.log('loadClaimedAgents: parsed', state.claimedAgents);
   } catch (e) {
     console.warn('Failed to load claimed agents:', e);
     state.claimedAgents = [];
@@ -140,7 +138,6 @@ function saveClaimedAgents() {
 
 function isAgentClaimed(pubkey) {
   const claimed = state.claimedAgents.some(a => a.pubkey === pubkey);
-  console.log('isAgentClaimed:', pubkey?.slice(0, 16), '=>', claimed, 'claimedAgents:', state.claimedAgents.map(a => a.pubkey?.slice(0, 16)));
   return claimed;
 }
 
@@ -316,7 +313,6 @@ function renderAgents() {
   dom.agentCount.textContent = agents.length;
   if (!agents.length) { dom.agentCards.innerHTML = '<div class="empty-state">no agents discovered yet</div>'; return; }
 
-  console.log('renderAgents: agents count', agents.length, 'claimedAgents', state.claimedAgents.length);
 
   dom.agentCards.innerHTML = agents.map(a => {
     const claimed = isAgentClaimed(a.pubkey);
@@ -339,7 +335,6 @@ function renderAgents() {
         </div>
       `;
     }
-    console.log('Agent:', a.name, 'actionsHtml length:', actionsHtml.length, 'sample:', actionsHtml.slice(0, 100));
 
     return `
     <div class="agent-card ${blocked} ${inactive}" data-pubkey="${esc(a.pubkey)}">
@@ -356,7 +351,6 @@ function renderAgents() {
     </div>`;
   }).join('');
 
-  console.log('Agent cards HTML rendered, actionsHtml length check:', agents.map(a => {
     const claimed = isAgentClaimed(a.pubkey);
     return { name: a.name, claimed, hasActions: true };
   }));
@@ -389,11 +383,9 @@ function renderAgents() {
       }
     });
   });
-  console.log('Agent cards HTML rendered, checking for claim-btn:', dom.agentCards.querySelectorAll('.claim-btn').length, 'manage-btn:', dom.agentCards.querySelectorAll('.manage-btn').length);
   // Debug: log first card's innerHTML to see if button is present
   const firstCard = dom.agentCards.querySelector('.agent-card');
   if (firstCard) {
-    console.log('First card HTML sample:', firstCard.innerHTML.slice(0, 500));
   }
 }
 
@@ -926,9 +918,7 @@ async function sendDm() {
 
 // ─── Init ───
 function init() {
-  console.log('Claku dashboard init');
   // Verify DOM elements exist
-  console.log('DOM elements:', {
     agentCards: dom.agentCards,
     claimModal: dom.claimModal,
     agentManagement: dom.agentManagement,
@@ -937,7 +927,6 @@ function init() {
   });
   // Load claimed agents from localStorage
   loadClaimedAgents();
-  console.log('Initial claimedAgents:', state.claimedAgents);
 
   dom.pairBtn.addEventListener('click', handlePair);
   dom.codeInput.addEventListener('keydown', e => { if (e.key==='Enter') handlePair(); });
