@@ -390,6 +390,11 @@ function renderAgents() {
     });
   });
   console.log('Agent cards HTML rendered, checking for claim-btn:', dom.agentCards.querySelectorAll('.claim-btn').length, 'manage-btn:', dom.agentCards.querySelectorAll('.manage-btn').length);
+  // Debug: log first card's innerHTML to see if button is present
+  const firstCard = dom.agentCards.querySelector('.agent-card');
+  if (firstCard) {
+    console.log('First card HTML sample:', firstCard.innerHTML.slice(0, 500));
+  }
 }
 
 // ─── Channels ───
