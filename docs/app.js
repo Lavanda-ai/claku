@@ -146,10 +146,13 @@ function getClaimedAgent(pubkey) {
 }
 
 async function verifyEd25519Signature(pubkeyHex, message, signatureB64) {
+  console.log('verifyEd25519Signature called with:', { pubkeyHex: pubkeyHex.slice(0, 16), message, signatureB64: signatureB64.slice(0, 20) });
   try {
     const pubkeyBytes = new Uint8Array(hexToBytes(pubkeyHex));
     const msgBytes = new TextEncoder().encode(message);
     const sigBytes = new Uint8Array(base64ToBytes(signatureB64));
+
+    console.log('Converted to bytes:', { pubkeyLen: pubkeyBytes.length, msgLen: msgBytes.length, sigLen: sigBytes.length });
 
     const cryptoKey = await crypto.subtle.importKey(
       'raw',
@@ -166,6 +169,7 @@ async function verifyEd25519Signature(pubkeyHex, message, signatureB64) {
       msgBytes
     );
 
+    console.log('Verification result:', valid);
     return valid;
   } catch (e) {
     console.warn('Signature verification failed:', e);
