@@ -351,10 +351,6 @@ function renderAgents() {
     </div>`;
   }).join('');
 
-    const claimed = isAgentClaimed(a.pubkey);
-    return { name: a.name, claimed, hasActions: true };
-  }));
-
   // Attach event listeners for claim/management buttons
   dom.agentCards.querySelectorAll('.claim-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -383,10 +379,6 @@ function renderAgents() {
       }
     });
   });
-  // Debug: log first card's innerHTML to see if button is present
-  const firstCard = dom.agentCards.querySelector('.agent-card');
-  if (firstCard) {
-  }
 }
 
 // ─── Channels ───
