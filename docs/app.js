@@ -910,13 +910,6 @@ async function sendDm() {
 
 // ─── Init ───
 function init() {
-  // Verify DOM elements exist
-    agentCards: dom.agentCards,
-    claimModal: dom.claimModal,
-    agentManagement: dom.agentManagement,
-    claimBtnClass: document.querySelector('.claim-btn'),
-    manageBtnClass: document.querySelector('.manage-btn')
-  });
   // Load claimed agents from localStorage
   loadClaimedAgents();
 
