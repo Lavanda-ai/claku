@@ -33,6 +33,9 @@ from .crypto import (
     verify_signature,
     hex_to_bytes,
 )
+from .signing import sign_msg, validate_msg, PROTOCOL
+from .pairing import PairingManager
+from .connections import ConnectionManager, SEEN, CONTACTED
 
 
 # ── Circle Storage ────────────────────────────────────────────────────────
@@ -122,6 +125,8 @@ class ClakuNode:
         )
         self.known_agents: dict[str, dict] = {}
         self.channels: set[str] = set(self.identity.get("channels", ["#general"]))
+        self.pairing = PairingManager()
+        self.connections = ConnectionManager()
         self._ensure_subscribed()
 
     def _ensure_subscribed(self) -> None:
@@ -164,23 +169,19 @@ class ClakuNode:
     # ── Discovery ─────────────────────────────────────────────────────────
 
     def agent_card(self) -> dict:
-        """Build this agent's public announcement card.
-
-        Returns:
-            Dict containing name, pubkey, capabilities, channels, and
-            the X25519 intro bundle for DM key exchange.
-        """
-        return {
+        """Build this agent's signed public announcement card."""
+        card = {
             "type": "agent_card",
             "name": self.identity["name"],
             "pubkey": self.identity["pubkey"],
+            "from_pubkey": self.identity["pubkey"],
             "owner": self.identity["owner"],
             "capabilities": self.identity["capabilities"],
             "channels": list(self.channels),
             "intro_bundle": {"x25519_pubkey": self.identity["x25519_pubkey"]},
             "version": self.identity.get("version", "claku/0.4.0"),
-            "ts": int(time.time()),
         }
+        return sign_msg(card, self.identity["secret"])
 
     def announce(self) -> bool:
         """Broadcast this agent's card to the discovery topic.
@@ -197,7 +198,8 @@ class ClakuNode:
     def discover(self) -> list[dict]:
         """Poll the discovery topic for other agents' cards.
 
-        Checks both relay (live) and store (historical) for agent cards.
+        Checks both store (historical) and relay (live) for agent cards.
+        Validates signatures and tracks trust levels.
 
         Returns:
             List of agent card dicts from other agents (excludes self).
@@ -205,30 +207,39 @@ class ClakuNode:
         agents: list[dict] = []
         seen: set[str] = set()
 
-        # Try store for historical cards first
+        def _process(msg: dict) -> None:
+            pk = msg.get("pubkey", "")
+            if msg.get("type") != "agent_card" or not pk or pk == self.identity["pubkey"] or pk in seen:
+                return
+            # Validate signature
+            valid, reason = validate_msg(msg)
+            msg["_verified"] = valid
+            if not valid:
+                # Accept unsigned legacy cards but mark them
+                if not msg.get("signature"):
+                    msg["_verified"] = False
+                else:
+                    return  # Bad signature — skip
+            seen.add(pk)
+            self.known_agents[pk] = msg
+            self.connections.on_agent_seen(pk, msg.get("name", ""), msg.get("capabilities", []))
+            agents.append(msg)
+            self._log_dashboard("discovered", {
+                "remote_agent": msg.get("name", ""),
+                "pubkey": pk[:16] + "...",
+                "verified": msg["_verified"],
+            })
+
+        # Store history first
         try:
-            stored = self.transport.store_query_json([DISCOVERY_TOPIC])
-            for msg in stored:
-                pk = msg.get("pubkey", "")
-                if msg.get("type") == "agent_card" and pk and pk != self.identity["pubkey"] and pk not in seen:
-                    seen.add(pk)
-                    self.known_agents[pk] = msg
-                    agents.append(msg)
+            for msg in self.transport.store_query_json([DISCOVERY_TOPIC]):
+                _process(msg)
         except Exception:
             pass
 
-        # Then check relay for live cards
-        messages = self.transport.poll_json(DISCOVERY_TOPIC)
-        for msg in messages:
-            pk = msg.get("pubkey", "")
-            if msg.get("type") == "agent_card" and pk and pk != self.identity["pubkey"] and pk not in seen:
-                seen.add(pk)
-                self.known_agents[pk] = msg
-                agents.append(msg)
-                self._log_dashboard("discovered", {
-                    "remote_agent": msg["name"],
-                    "pubkey": pk[:16] + "...",
-                })
+        # Relay for live cards
+        for msg in self.transport.poll_json(DISCOVERY_TOPIC):
+            _process(msg)
 
         return agents
 
@@ -271,20 +282,14 @@ class ClakuNode:
             ``True`` if the message was published successfully.
         """
         channel = self._normalize_channel(channel)
-        msg_id = str(uuid.uuid4())
         msg = {
             "type": "channel_msg",
             "channel": channel,
             "from": self.identity["name"],
             "from_pubkey": self.identity["pubkey"],
             "text": text,
-            "msg_id": msg_id,
-            "ts": int(time.time()),
         }
-        # Sign: msg_id + channel + text
-        sign_data = f"{msg_id}:{channel}:{text}".encode("utf-8")
-        ed_priv = hex_to_bytes(self.identity["secret"])
-        msg["signature"] = sign_message(sign_data, ed_priv)
+        sign_msg(msg, self.identity["secret"])
 
         topic = CHANNEL_TOPIC(channel.lstrip("#"))
         ok = self.transport.publish_json(topic, msg)
@@ -970,6 +975,131 @@ class ClakuNode:
         if new_votes:
             _save_proposals(proposals)
         return new_votes
+
+    # ── Connections ───────────────────────────────────────────────────────
+
+    def send_connection_request(self, to_pubkey: str, reason: str = "") -> bool:
+        """Send a connection request to another agent's inbox."""
+        msg = {
+            "type": "connection_request",
+            "from": self.identity["pubkey"],
+            "from_pubkey": self.identity["pubkey"],
+            "from_name": self.identity["name"],
+            "from_capabilities": self.identity["capabilities"],
+            "to": to_pubkey,
+            "reason": reason,
+        }
+        sign_msg(msg, self.identity["secret"])
+        topic = f"/claku/1/inbox/{to_pubkey[:32]}/proto"
+        ok = self.transport.publish_json(topic, msg)
+        if ok:
+            self._log_dashboard("connection_request_sent", {"to": to_pubkey[:16]})
+        return ok
+
+    def accept_connection(self, request_msg: dict) -> bool:
+        """Accept a connection request."""
+        from_pk = request_msg.get("from_pubkey", request_msg.get("from", ""))
+        if not from_pk:
+            return False
+        msg = {
+            "type": "connection_accept",
+            "from": self.identity["pubkey"],
+            "from_pubkey": self.identity["pubkey"],
+            "to": from_pk,
+            "request_id": request_msg.get("msg_id", ""),
+        }
+        sign_msg(msg, self.identity["secret"])
+        topic = f"/claku/1/inbox/{from_pk[:32]}/proto"
+        ok = self.transport.publish_json(topic, msg)
+        if ok:
+            self.connections.accept_connection(from_pk, request_msg.get("from_name", ""))
+            self._log_dashboard("connection_accepted", {"from": from_pk[:16]})
+        return ok
+
+    def refuse_connection(self, request_msg: dict, reason: str = "") -> bool:
+        """Refuse a connection request."""
+        from_pk = request_msg.get("from_pubkey", request_msg.get("from", ""))
+        if not from_pk:
+            return False
+        msg = {
+            "type": "connection_refuse",
+            "from": self.identity["pubkey"],
+            "from_pubkey": self.identity["pubkey"],
+            "to": from_pk,
+            "request_id": request_msg.get("msg_id", ""),
+            "reason": reason,
+        }
+        sign_msg(msg, self.identity["secret"])
+        topic = f"/claku/1/inbox/{from_pk[:32]}/proto"
+        ok = self.transport.publish_json(topic, msg)
+        if ok:
+            self._log_dashboard("connection_refused", {"from": from_pk[:16]})
+        return ok
+
+    def poll_inbox(self) -> list[dict]:
+        """Poll this agent's inbox for connection requests and responses."""
+        my_pk = self.identity["pubkey"]
+        topic = f"/claku/1/inbox/{my_pk[:32]}/proto"
+        messages = []
+
+        # Store + relay
+        try:
+            for msg in self.transport.store_query_json([topic]):
+                valid, _ = validate_msg(msg)
+                if valid:
+                    messages.append(msg)
+        except Exception:
+            pass
+        for msg in self.transport.poll_json(topic):
+            valid, _ = validate_msg(msg)
+            if valid:
+                messages.append(msg)
+
+        # Auto-accept if configured
+        results = []
+        for msg in messages:
+            mtype = msg.get("type", "")
+            if mtype == "connection_request":
+                from_pk = msg.get("from_pubkey", msg.get("from", ""))
+                if self.connections.should_auto_accept(
+                    from_pk,
+                    msg.get("from_capabilities", []),
+                ):
+                    self.accept_connection(msg)
+                    msg["_auto_accepted"] = True
+                else:
+                    msg["_pending"] = True
+            results.append(msg)
+
+        return results
+
+    # ── Pairing ──────────────────────────────────────────────────────────
+
+    def create_pairing_code(self) -> dict:
+        """Generate a pairing code for human-agent pairing.
+
+        Returns:
+            Dict with code, agent_pubkey, eph_public, expires.
+        """
+        offer = self.pairing.create_offer(
+            self.identity["pubkey"],
+            self.identity["x25519_pubkey"],
+        )
+        self._log_dashboard("pairing_offer", {"code": offer["code"]})
+        return offer
+
+    def complete_pairing(self, code: str, human_x25519_pub_hex: str) -> dict | None:
+        """Complete a pairing using the code and human's public key.
+
+        Returns:
+            Pairing dict or None if code invalid/expired.
+        """
+        result = self.pairing.accept_offer(code, human_x25519_pub_hex)
+        if result:
+            self._log_dashboard("pairing_complete", {
+                "human_pubkey": human_x25519_pub_hex[:16],
+            })
+        return result
 
     # ── Run Loop ──────────────────────────────────────────────────────────
 
