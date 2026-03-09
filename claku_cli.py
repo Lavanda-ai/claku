@@ -27,6 +27,7 @@ from src.node import ClakuNode
 from src.identity import load_identity, DASHBOARD_FILE, CLAKU_DIR
 from src.transport import WakuTransport
 from src.config import load_config, save_config
+from src.pairing import PairingManager
 
 
 def cmd_init(args: argparse.Namespace) -> None:
@@ -308,6 +309,97 @@ def cmd_claim_challenge(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+# ── Pairing Commands ───────────────────────────────────────────────────────
+
+
+def cmd_pair_request(args: argparse.Namespace) -> None:
+    """Create a pairing request for a human."""
+    identity = _require_identity()
+    manager = PairingManager(identity, args.waku, auto_sharding=args.auto_sharding)
+    
+    try:
+        request = manager.send_pairing_request(args.human_identifier)
+        print(f"✔ Pairing request created for {args.human_identifier}")
+        print(f"  Pairing ID: {request['pairing_id']}")
+        print(f"  Code: {request['code']}")
+        print(f"  Expires in: 5 minutes")
+        print(f"\nShare this 6-digit code with the human to complete pairing.")
+    except Exception as e:
+        print(f"✖ Failed to create pairing request: {e}")
+        sys.exit(1)
+
+
+def cmd_pair_verify(args: argparse.Namespace) -> None:
+    """Verify a pairing code."""
+    identity = _require_identity()
+    manager = PairingManager(identity, args.waku, auto_sharding=args.auto_sharding)
+    
+    if manager.verify_pairing_code(args.pairing_id, args.code):
+        print("✔ Code verified successfully")
+    else:
+        print("✖ Invalid or expired code")
+        sys.exit(1)
+
+
+def cmd_pair_accept(args: argparse.Namespace) -> None:
+    """Accept a pairing request."""
+    identity = _require_identity()
+    manager = PairingManager(identity, args.waku, auto_sharding=args.auto_sharding)
+    
+    if manager.accept_pairing(args.pairing_id, args.human_pubkey):
+        print("✔ Pairing accepted successfully")
+        print(f"  Pairing ID: {args.pairing_id}")
+        if args.human_pubkey:
+            print(f"  Human pubkey: {args.human_pubkey[:16]}...")
+    else:
+        print("✖ Failed to accept pairing (invalid ID or expired)")
+        sys.exit(1)
+
+
+def cmd_pair_refuse(args: argparse.Namespace) -> None:
+    """Refuse a pairing request."""
+    identity = _require_identity()
+    manager = PairingManager(identity, args.waku, auto_sharding=args.auto_sharding)
+    
+    if manager.refuse_pairing(args.pairing_id):
+        print("✔ Pairing refused")
+    else:
+        print("✖ Failed to refuse pairing (invalid ID)")
+        sys.exit(1)
+
+
+def cmd_pair_list(args: argparse.Namespace) -> None:
+    """List pending pairing requests and active pairings."""
+    identity = _require_identity()
+    manager = PairingManager(identity, args.waku, auto_sharding=args.auto_sharding)
+    
+    import time
+    
+    if not args.active:
+        # Show pending requests
+        requests = manager.get_pending_requests()
+        if requests:
+            print(f"Pending pairing requests ({len(requests)}):")
+            for req in requests:
+                expires_in = req['expires_at'] - int(time.time())
+                if expires_in > 0:
+                    print(f"  → {req['human_identifier']} (ID: {req['pairing_id'][:12]}..., expires in {expires_in}s)")
+        else:
+            print("No pending pairing requests.")
+    
+    if args.active or not args.pending_only:
+        # Show active pairings
+        pairings = manager.get_active_pairings()
+        if pairings:
+            print(f"\nActive pairings ({len(pairings)}):")
+            for pairing in pairings:
+                human_id = pairing['human_identifier']
+                paired_at = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(pairing['paired_at']))
+                print(f"  → {human_id} (ID: {pairing['pairing_id'][:12]}..., paired at {paired_at})")
+        elif not args.pending_only:
+            print("\nNo active pairings.")
+
+
 # ── Circle Commands ───────────────────────────────────────────────────────
 
 
@@ -533,6 +625,29 @@ def main() -> None:
     p_cc = sub.add_parser("claim-challenge", help="Sign a challenge to prove agent ownership")
     p_cc.add_argument("challenge", help="Challenge string to sign (from dashboard)")
 
+    # pair-request
+    p_pr = sub.add_parser("pair-request", help="Create a pairing request for a human")
+    p_pr.add_argument("--human-identifier", required=True, help="Human identifier (email, phone, etc.)")
+
+    # pair-verify
+    p_pv = sub.add_parser("pair-verify", help="Verify a pairing code")
+    p_pv.add_argument("--pairing-id", required=True, help="Pairing ID")
+    p_pv.add_argument("--code", required=True, help="6-digit pairing code")
+
+    # pair-accept
+    p_pa = sub.add_parser("pair-accept", help="Accept a pairing request")
+    p_pa.add_argument("--pairing-id", required=True, help="Pairing ID")
+    p_pa.add_argument("--human-pubkey", help="Human's public key (optional)")
+
+    # pair-refuse
+    p_pf = sub.add_parser("pair-refuse", help="Refuse a pairing request")
+    p_pf.add_argument("--pairing-id", required=True, help="Pairing ID")
+
+    # pair-list
+    p_pl = sub.add_parser("pair-list", help="List pairing requests and connections")
+    p_pl.add_argument("--active", action="store_true", help="Show only active pairings")
+    p_pl.add_argument("--pending-only", action="store_true", help="Show only pending requests")
+
     # circle-create
     p_cc = sub.add_parser("circle-create", help="Create a new Circle")
     p_cc.add_argument("--name", required=True, help="Circle name (lowercase, no spaces)")
@@ -584,6 +699,11 @@ def main() -> None:
         "dashboard": cmd_dashboard,
         "identity": cmd_identity,
         "claim-challenge": cmd_claim_challenge,
+        "pair-request": cmd_pair_request,
+        "pair-verify": cmd_pair_verify,
+        "pair-accept": cmd_pair_accept,
+        "pair-refuse": cmd_pair_refuse,
+        "pair-list": cmd_pair_list,
         "circle-create": cmd_circle_create,
         "circle-join": cmd_circle_join,
         "circle-leave": cmd_circle_leave,
