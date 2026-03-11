@@ -14,11 +14,13 @@ const circleVoteTopic = (name) => `${TOPIC_PREFIX}/circle/${name}/vote/proto`;
 
 // ─── State ───
 const state = {
-  node: null, paired: false, humanIdentifier: null,
+  node: null, paired: false, channelCode: null,
   agents: new Map(), channels: new Map(), dms: new Map(),
   circles: new Map(), currentCircle: null,
   activity: [], currentChannel: null, currentDmPeer: null,
-  pairingCode: null, pairingExpiry: null,
+  claimedAgents: [], // Array of {pubkey, name, claimedAt, settings}
+  currentManagingAgent: null, // Agent pubkey being managed in side panel
+  claimChallenge: null, // {challenge, createdAt, agentPubkey}
 };
 
 // ─── DOM ───
@@ -26,13 +28,8 @@ const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
 const dom = {
   pairingSection: $('#pairing-section'),
-  humanIdentifierInput: $('#human-identifier-input'),
-  requestPairBtn: $('#request-pair-btn'),
-  pairingCodeSection: $('#pairing-code-section'),
-  pairingCodeDisplay: $('#pairing-code-display'),
-  expiryTimer: $('#expiry-timer'),
-  verifyCodeInput: $('#verify-code-input'),
-  verifyPairBtn: $('#verify-pair-btn'),
+  codeInput: $('#channel-code-input'),
+  pairBtn: $('#pair-btn'),
   pairingStatus: $('#pairing-status'),
   navTabs: $('#nav-tabs'),
   mainContent: $('#main-content'),
@@ -79,6 +76,25 @@ const dom = {
   proposalDescInput: $('#proposal-desc-input'),
   proposalDeadlineInput: $('#proposal-deadline-input'),
   submitCreateProposal: $('#submit-create-proposal'),
+  // Claim Modal
+  claimModal: $('#claim-modal'),
+  closeClaimModal: $('#close-claim-modal'),
+  claimInstructions: $('#claim-instructions'),
+  claimChallengeText: $('#claim-challenge-text'),
+  copyChallenge: $('#copy-challenge'),
+  claimSignatureInput: $('#claim-signature-input'),
+  claimStatus: $('#claim-status'),
+  submitClaim: $('#submit-claim'),
+  // Agent Management
+  agentManagement: $('#agent-management'),
+  closeAgentManagement: $('#close-agent-management'),
+  agentBlockedToggle: $('#agent-blocked-toggle'),
+  agentActiveToggle: $('#agent-active-toggle'),
+  agentAutoAnnounce: $('#agent-auto-announce'),
+  agentAllowDms: $('#agent-allow-dms'),
+  agentMaxChannels: $('#agent-max-channels'),
+  saveSettingsBtn: $('#save-settings-btn'),
+  unclaimAgentBtn: $('#unclaim-agent-btn'),
 };
 
 // ─── Utilities ───
@@ -94,6 +110,175 @@ function truncate(s, n = 16) { return s && s.length > n ? s.slice(0, n) + '...' 
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 function nowTs() { return Math.floor(Date.now() / 1000); }
 function setHealth(st) { dom.healthDot.className = `health-dot ${st}`; dom.healthText.textContent = st; }
+
+// ─── Claim System Utilities ───────────────────────────────────────────────
+function generateChallenge() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function loadClaimedAgents() {
+  try {
+    const data = localStorage.getItem('claku_claimed_agents');
+    state.claimedAgents = data ? JSON.parse(data) : [];
+  } catch (e) {
+    console.warn('Failed to load claimed agents:', e);
+    state.claimedAgents = [];
+  }
+}
+
+function saveClaimedAgents() {
+  try {
+    localStorage.setItem('claku_claimed_agents', JSON.stringify(state.claimedAgents));
+  } catch (e) {
+    console.warn('Failed to save claimed agents:', e);
+  }
+}
+
+function isAgentClaimed(pubkey) {
+  const claimed = state.claimedAgents.some(a => a.pubkey === pubkey);
+  return claimed;
+}
+
+function getClaimedAgent(pubkey) {
+  return state.claimedAgents.find(a => a.pubkey === pubkey);
+}
+
+async function verifyEd25519Signature(pubkeyHex, messageHex, signatureB64) {
+  console.log('verifyEd25519Signature called with:', { pubkeyHex: pubkeyHex.slice(0, 16), messageHex, signatureB64: signatureB64.slice(0, 20) });
+  try {
+    // Decode hex pubkey to bytes
+    const pubkeyBytes = new Uint8Array(hexToBytes(pubkeyHex));
+    // Decode hex message (challenge) to raw bytes
+    const msgBytes = new Uint8Array(hexToBytes(messageHex));
+    // Decode base64 signature to bytes
+    const sigBytes = new Uint8Array(base64ToBytes(signatureB64));
+
+    console.log('Converted to bytes:', { pubkeyLen: pubkeyBytes.length, msgLen: msgBytes.length, sigLen: sigBytes.length });
+
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      pubkeyBytes,
+      { name: 'Ed25519', namedCurve: 'Ed25519' },
+      false,
+      ['verify']
+    );
+
+    const valid = await crypto.subtle.verify(
+      { name: 'Ed25519' },
+      cryptoKey,
+      sigBytes,
+      msgBytes
+    );
+
+    console.log('Verification result:', valid);
+    return valid;
+  } catch (e) {
+    console.warn('Signature verification failed:', e);
+    return false;
+  }
+}
+
+function hexToBytes(hex) {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+  }
+  return bytes;
+}
+
+function base64ToBytes(b64) {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function showToast(message, type = 'info') {
+  // Remove existing toast
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+
+  // Trigger reflow for transition
+  toast.offsetHeight;
+  toast.classList.add('visible');
+
+  setTimeout(() => {
+    toast.classList.remove('visible');
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+
+function openClaimModal(agent) {
+  const challenge = generateChallenge();
+  state.claimChallenge = {
+    challenge,
+    createdAt: nowTs(),
+    agentPubkey: agent.pubkey
+  };
+
+  dom.claimChallengeText.textContent = challenge;
+  dom.claimSignatureInput.value = '';
+  dom.claimStatus.textContent = '';
+  dom.claimModal.classList.remove('hidden');
+  dom.claimInstructions.textContent = `Claim agent "${agent.name}"? Sign this challenge with your CLI to prove ownership.`;
+}
+
+function closeClaimModal() {
+  dom.claimModal.classList.add('hidden');
+  state.claimChallenge = null;
+}
+
+function openAgentManagement(agent) {
+  const claimed = getClaimedAgent(agent.pubkey);
+  if (!claimed) return;
+
+  state.currentManagingAgent = agent.pubkey;
+
+  // Load settings
+  const settings = claimed.settings || {
+    blocked: false,
+    active: true,
+    auto_announce: true,
+    allow_dms: true,
+    max_channels: 10
+  };
+
+  dom.agentBlockedToggle.checked = settings.blocked || false;
+  dom.agentActiveToggle.checked = settings.active !== false; // default true
+  dom.agentAutoAnnounce.checked = settings.auto_announce !== false; // default true
+  dom.agentAllowDms.checked = settings.allow_dms !== false; // default true
+  dom.agentMaxChannels.value = settings.max_channels || 10;
+
+  dom.agentManagement.classList.remove('hidden');
+}
+
+function closeAgentManagement() {
+  dom.agentManagement.classList.add('hidden');
+  state.currentManagingAgent = null;
+}
+
+function getAgentSettings(pubkey) {
+  const claimed = getClaimedAgent(pubkey);
+  return claimed ? (claimed.settings || {}) : {};
+}
+
+function updateAgentSettings(pubkey, settings) {
+  const claimed = getClaimedAgent(pubkey);
+  if (claimed) {
+    claimed.settings = { ...claimed.settings, ...settings };
+    saveClaimedAgents();
+    renderAgents(); // Refresh UI
+  }
+}
 
 // ─── Activity Feed ───
 function addActivity(type, data) {
@@ -134,17 +319,73 @@ function renderAgents() {
   const agents = Array.from(state.agents.values());
   dom.agentCount.textContent = agents.length;
   if (!agents.length) { dom.agentCards.innerHTML = '<div class="empty-state">no agents discovered yet</div>'; return; }
-  dom.agentCards.innerHTML = agents.map(a => `
-    <div class="agent-card">
+
+
+  dom.agentCards.innerHTML = agents.map(a => {
+    const claimed = isAgentClaimed(a.pubkey);
+    const settings = claimed ? getAgentSettings(a.pubkey) : {};
+    const blocked = settings.blocked ? 'blocked' : '';
+    const inactive = settings.active === false ? 'inactive' : '';
+
+    let actionsHtml = '';
+    if (claimed) {
+      actionsHtml = `
+        <div class="agent-card-management">
+          <button class="manage-btn" data-pubkey="${esc(a.pubkey)}">⚙️ Manage</button>
+          <button class="manage-btn unclaim-btn" data-pubkey="${esc(a.pubkey)}">Unclaim</button>
+        </div>
+      `;
+    } else {
+      actionsHtml = `
+        <div class="agent-card-actions">
+          <button class="claim-btn" data-pubkey="${esc(a.pubkey)}">Claim Agent</button>
+        </div>
+      `;
+    }
+
+    return `
+    <div class="agent-card ${blocked} ${inactive}" data-pubkey="${esc(a.pubkey)}">
       <div class="agent-card-header">
         <span class="agent-card-name">${esc(a.name||'?')}</span>
         <span class="agent-card-version">${esc(a.version||'')}</span>
+        ${claimed ? '<span class="claimed-badge">Claimed</span>' : ''}
       </div>
       <div class="agent-card-owner">owner: ${esc(a.owner||'?')}</div>
       <div class="agent-card-pubkey">${esc(a.pubkey||'')}</div>
       <div class="agent-card-caps">${(a.capabilities||[]).map(c=>`<span class="cap-tag">${esc(c)}</span>`).join('')}</div>
       <div class="agent-card-channels">channels: ${esc((a.channels||[]).join(', '))}</div>
-    </div>`).join('');
+      ${actionsHtml}
+    </div>`;
+  }).join('');
+
+  // Attach event listeners for claim/management buttons
+  dom.agentCards.querySelectorAll('.claim-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const pubkey = btn.dataset.pubkey;
+      const agent = state.agents.get(pubkey);
+      if (agent) openClaimModal(agent);
+    });
+  });
+
+  dom.agentCards.querySelectorAll('.manage-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const pubkey = btn.dataset.pubkey;
+      const agent = state.agents.get(pubkey);
+      if (agent) openAgentManagement(agent);
+    });
+  });
+
+  dom.agentCards.querySelectorAll('.unclaim-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const pubkey = btn.dataset.pubkey;
+      if (confirm('Unclaim this agent? You will lose management control.')) {
+        state.claimedAgents = state.claimedAgents.filter(a => a.pubkey !== pubkey);
+        saveClaimedAgents();
+        renderAgents();
+        showToast('Agent unclaimed', 'success');
+      }
+    });
+  });
 }
 
 // ─── Channels ───
@@ -436,11 +677,15 @@ let reconnectTimer = null;
 const seenMsgIds = new Set();
 
 async function connectWaku() {
+  console.log('connectWaku called, WAKU_REST:', WAKU_REST);
   setHealth('connecting');
   addActivity('system', { text: 'connecting to Waku gateway...' });
   try {
+    console.log('Fetching health endpoint...');
     const resp = await fetch(`${WAKU_REST}/health`, { signal: AbortSignal.timeout(8000) });
+    console.log('Health response status:', resp.status, 'ok:', resp.ok);
     const health = await resp.json();
+    console.log('Health data:', health);
     if (health.nodeHealth === 'READY') {
       setHealth('online');
       const peerStatus = health.connectionStatus || 'unknown';
@@ -565,6 +810,10 @@ async function publishTopic(topic, data) {
 
 async function loadStoreHistory() {
   const topics = ['/claku/1/discovery/proto', '/claku/1/channel/general/proto'];
+  // Also load the channel the user entered
+  if (state.channelCode && state.channelCode !== 'general') {
+    topics.push(`/claku/1/channel/${state.channelCode}/proto`);
+  }
   for (const topic of topics) {
     try {
       const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent(topic)}&pageSize=50&includeData=true&ascending=true`;
@@ -613,123 +862,34 @@ function switchTab(name) {
   if (name === 'circles') { closeCircle(); renderCircleList(); }
 }
 
-// ─── Pairing Timer ───
-function startExpiryTimer() {
-  if (!state.pairingExpiry) return;
-  const updateTimer = () => {
-    const now = Date.now();
-    const remaining = state.pairingExpiry - now;
-    if (remaining <= 0) {
-      dom.pairingCodeSection.classList.add('hidden');
-      dom.pairingStatus.textContent = 'Pairing code expired. Request a new one.';
-      dom.pairingStatus.className = 'pairing-status error';
-      state.pairingCode = null;
-      state.pairingExpiry = null;
-      return;
-    }
-    const mins = Math.floor(remaining / 60000);
-    const secs = Math.floor((remaining % 60000) / 1000);
-    dom.expiryTimer.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
-    setTimeout(updateTimer, 1000);
-  };
-  updateTimer();
-}
-
 // ─── Pairing ───
-async function handleRequestPair() {
-  const email = dom.humanIdentifierInput.value.trim();
-  if (!email) { 
-    dom.pairingStatus.textContent = 'Please enter your email address'; 
-    dom.pairingStatus.className = 'pairing-status error'; 
-    return; 
-  }
-  
-  // Validate email format
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    dom.pairingStatus.textContent = 'Please enter a valid email address';
-    dom.pairingStatus.className = 'pairing-status error';
-    return;
-  }
-  
-  dom.pairingStatus.textContent = 'Requesting pairing code...';
+async function handlePair() {
+  console.log('handlePair called, code:', dom.codeInput.value.trim());
+  const code = dom.codeInput.value.trim();
+  if (!code) { dom.pairingStatus.textContent = 'enter a channel code'; dom.pairingStatus.className = 'pairing-status error'; return; }
+  state.channelCode = code;
+  dom.pairingStatus.textContent = 'connecting...';
   dom.pairingStatus.className = 'pairing-status';
-  dom.requestPairBtn.disabled = true;
-  
-  try {
-    // In a real implementation, this would call the Claku CLI to generate a pairing code
-    // For now, we'll simulate it with a mock 6-digit code
-    const mockCode = '123456'; // This would be replaced with actual CLI integration
-    const expiryTime = Date.now() + (5 * 60 * 1000); // 5 minutes from now
-    
-    state.pairingCode = mockCode;
-    state.pairingExpiry = expiryTime;
-    state.humanIdentifier = email;
-    
-    dom.pairingCodeDisplay.textContent = mockCode;
-    dom.pairingCodeSection.classList.remove('hidden');
-    dom.pairingStatus.textContent = '';
-    dom.pairingStatus.className = 'pairing-status';
-    
-    startExpiryTimer();
-    
-  } catch (error) {
-    dom.pairingStatus.textContent = 'Failed to request pairing code. Please try again.';
-    dom.pairingStatus.className = 'pairing-status error';
-    console.error('Pairing request error:', error);
-  } finally {
-    dom.requestPairBtn.disabled = false;
-  }
-}
+  dom.pairBtn.disabled = true;
 
-async function handleVerifyPair() {
-  const code = dom.verifyCodeInput.value.trim();
-  if (!code) { 
-    dom.pairingStatus.textContent = 'Please enter the 6-digit code'; 
-    dom.pairingStatus.className = 'pairing-status error'; 
-    return; 
+  const ok = await connectWaku();
+  console.log('connectWaku result:', ok);
+
+  state.paired = true;
+  dom.pairingSection.classList.add('hidden');
+  dom.navTabs.classList.remove('hidden');
+  dom.mainContent.classList.remove('hidden');
+  if (!state.channels.has('general')) state.channels.set('general', []);
+  if (code !== 'general' && !state.channels.has(code)) state.channels.set(code, []);
+  renderChannelList();
+
+  if (ok) {
+    await subscribeDefaults();
+    dom.pairingStatus.textContent = '';
+  } else {
+    addActivity('system', { text: 'offline mode — will auto-reconnect when gateway is available' });
   }
-  
-  if (code !== state.pairingCode) {
-    dom.pairingStatus.textContent = 'Invalid code. Please try again.';
-    dom.pairingStatus.className = 'pairing-status error';
-    return;
-  }
-  
-  if (Date.now() >= state.pairingExpiry) {
-    dom.pairingStatus.textContent = 'Code has expired. Request a new one.';
-    dom.pairingStatus.className = 'pairing-status error';
-    return;
-  }
-  
-  dom.pairingStatus.textContent = 'Verifying and connecting...';
-  dom.pairingStatus.className = 'pairing-status';
-  dom.verifyPairBtn.disabled = true;
-  
-  try {
-    const ok = await connectWaku();
-    
-    state.paired = true;
-    dom.pairingSection.classList.add('hidden');
-    dom.navTabs.classList.remove('hidden');
-    dom.mainContent.classList.remove('hidden');
-    
-    if (!state.channels.has('general')) state.channels.set('general', []);
-    renderChannelList();
-    
-    if (ok) {
-      await subscribeDefaults();
-      dom.pairingStatus.textContent = '';
-    } else {
-      addActivity('system', { text: 'offline mode — will auto-reconnect when gateway is available' });
-    }
-  } catch (error) {
-    dom.pairingStatus.textContent = 'Connection failed. Please try again.';
-    dom.pairingStatus.className = 'pairing-status error';
-    console.error('Pairing verification error:', error);
-  } finally {
-    dom.verifyPairBtn.disabled = false;
-  }
+  dom.pairBtn.disabled = false;
 }
 
 // ─── Send Channel Message ───
@@ -763,10 +923,11 @@ async function sendDm() {
 
 // ─── Init ───
 function init() {
-  dom.requestPairBtn.addEventListener('click', handleRequestPair);
-  dom.humanIdentifierInput.addEventListener('keydown', e => { if (e.key==='Enter') handleRequestPair(); });
-  dom.verifyPairBtn.addEventListener('click', handleVerifyPair);
-  dom.verifyCodeInput.addEventListener('keydown', e => { if (e.key==='Enter') handleVerifyPair(); });
+  // Load claimed agents from localStorage
+  loadClaimedAgents();
+
+  dom.pairBtn.addEventListener('click', handlePair);
+  dom.codeInput.addEventListener('keydown', e => { if (e.key==='Enter') handlePair(); });
   $$('.tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
   dom.backToChannels.addEventListener('click', closeChannel);
   dom.refreshChannelsBtn.addEventListener('click', renderChannelList);
@@ -785,7 +946,103 @@ function init() {
   dom.submitCreateProposal.addEventListener('click', submitCreateProposal);
   dom.proposalTitleInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitCreateProposal(); });
 
+  // Claim Modal events
+  dom.closeClaimModal.addEventListener('click', closeClaimModal);
+  dom.copyChallenge.addEventListener('click', () => {
+    navigator.clipboard.writeText(dom.claimChallengeText.textContent).then(() => {
+      showToast('Challenge copied to clipboard');
+    }).catch(() => {
+      showToast('Failed to copy', 'error');
+    });
+  });
+  dom.submitClaim.addEventListener('click', async () => {
+    if (!state.claimChallenge) return;
+    const signature = dom.claimSignatureInput.value.trim();
+    if (!signature) {
+      dom.claimStatus.textContent = 'Please paste the signature';
+      dom.claimStatus.className = 'claim-status error';
+      return;
+    }
+
+    const { challenge, agentPubkey } = state.claimChallenge;
+
+    // Check expiry (10 minutes)
+    if (nowTs() - state.claimChallenge.createdAt > 600) {
+      dom.claimStatus.textContent = 'Challenge expired. Please try again.';
+      dom.claimStatus.className = 'claim-status error';
+      return;
+    }
+
+    // Verify signature
+    dom.claimStatus.textContent = 'Verifying...';
+    dom.claimStatus.className = 'claim-status';
+    const valid = await verifyEd25519Signature(agentPubkey, challenge, signature);
+
+    if (!valid) {
+      dom.claimStatus.textContent = 'Invalid signature. Are you using the correct agent?';
+      dom.claimStatus.className = 'claim-status error';
+      return;
+    }
+
+    // Check if already claimed by another dashboard
+    if (isAgentClaimed(agentPubkey)) {
+      dom.claimStatus.textContent = 'This agent is already claimed on this dashboard.';
+      dom.claimStatus.className = 'claim-status error';
+      return;
+    }
+
+    // Add to claimed agents
+    const agent = state.agents.get(agentPubkey);
+    state.claimedAgents.push({
+      pubkey: agentPubkey,
+      name: agent ? agent.name : 'Unknown',
+      claimedAt: nowTs(),
+      settings: {
+        blocked: false,
+        active: true,
+        auto_announce: true,
+        allow_dms: true,
+        max_channels: 10
+      }
+    });
+    saveClaimedAgents();
+
+    closeClaimModal();
+    showToast(`Agent "${agent ? agent.name : agentPubkey.slice(0, 16)}..." claimed successfully!`, 'success');
+    renderAgents();
+  });
+
+  // Management panel events
+  dom.closeAgentManagement.addEventListener('click', closeAgentManagement);
+  dom.saveSettingsBtn.addEventListener('click', () => {
+    if (!state.currentManagingAgent) return;
+    const settings = {
+      blocked: dom.agentBlockedToggle.checked,
+      active: dom.agentActiveToggle.checked,
+      auto_announce: dom.agentAutoAnnounce.checked,
+      allow_dms: dom.agentAllowDms.checked,
+      max_channels: parseInt(dom.agentMaxChannels.value) || 10
+    };
+    updateAgentSettings(state.currentManagingAgent, settings);
+    showToast('Settings saved', 'success');
+    closeAgentManagement();
+  });
+  dom.unclaimAgentBtn.addEventListener('click', () => {
+    if (!state.currentManagingAgent) return;
+    if (confirm('Unclaim this agent? You will lose management control.')) {
+      state.claimedAgents = state.claimedAgents.filter(a => a.pubkey !== state.currentManagingAgent);
+      saveClaimedAgents();
+      closeAgentManagement();
+      renderAgents();
+      showToast('Agent unclaimed', 'success');
+    }
+  });
+
   renderActivity(); renderAgents(); renderChannelList(); renderDmList(); renderCircleList();
+
+  // Auto-pair from URL
+  const code = new URLSearchParams(location.search).get('code') || location.hash.slice(1);
+  if (code) { dom.codeInput.value = code; handlePair(); }
 }
 
 document.addEventListener('DOMContentLoaded', init);

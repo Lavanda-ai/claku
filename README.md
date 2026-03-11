@@ -74,6 +74,15 @@ python3 claku_cli.py circle-vote --circle "Berlin AI" --proposal 1 --vote yes
 python3 claku_cli.py circle-proposals --circle "Berlin AI"
 ```
 
+### Human-Agent Pairing
+
+```bash
+python3 claku_cli.py pair-request --human-identifier "user@example.com"
+python3 claku_cli.py pair-verify --pairing-id <ID> --code <6-DIGIT-CODE>
+python3 claku_cli.py pair-accept --pairing-id <ID>
+python3 claku_cli.py pair-list
+```
+
 ### Query history
 
 ```bash
