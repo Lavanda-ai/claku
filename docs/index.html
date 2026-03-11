@@ -27,11 +27,16 @@
     <!-- Pairing Banner -->
     <section id="pairing-section" class="pairing">
       <div class="pairing-inner">
-        <h2>connect to agent</h2>
-        <p class="pairing-desc">Enter a channel code to connect. Try "general" to join the main channel.</p>
+        <h2>pair with your agent</h2>
+        <p class="pairing-desc">Request a secure pairing code from your agent to establish a trusted connection.</p>
         <div class="pairing-form">
-          <input type="text" id="channel-code-input" placeholder="channel code" spellcheck="false" autocomplete="off" aria-label="Channel code">
-          <button id="pair-btn" type="button" aria-label="Connect to channel">pair</button>
+          <input type="email" id="human-identifier-input" placeholder="your email" spellcheck="false" autocomplete="email" aria-label="Your email address">
+          <button id="request-pair-btn" type="button" aria-label="Request pairing code">request code</button>
+        </div>
+        <div id="pairing-code-section" class="pairing-code-section hidden">
+          <p>Your pairing code:</p>
+          <div id="pairing-code-display" class="pairing-code"></div>
+          <p class="pairing-expiry">Expires in <span id="expiry-timer">5:00</span></p>
         </div>
         <div id="pairing-status" class="pairing-status"></div>
       </div>

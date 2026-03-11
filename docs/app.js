@@ -14,10 +14,11 @@ const circleVoteTopic = (name) => `${TOPIC_PREFIX}/circle/${name}/vote/proto`;
 
 // ─── State ───
 const state = {
-  node: null, paired: false, channelCode: null,
+  node: null, paired: false, humanIdentifier: null,
   agents: new Map(), channels: new Map(), dms: new Map(),
   circles: new Map(), currentCircle: null,
   activity: [], currentChannel: null, currentDmPeer: null,
+  pairingCode: null, pairingExpiry: null,
 };
 
 // ─── DOM ───
@@ -25,8 +26,13 @@ const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
 const dom = {
   pairingSection: $('#pairing-section'),
-  codeInput: $('#channel-code-input'),
-  pairBtn: $('#pair-btn'),
+  humanIdentifierInput: $('#human-identifier-input'),
+  requestPairBtn: $('#request-pair-btn'),
+  pairingCodeSection: $('#pairing-code-section'),
+  pairingCodeDisplay: $('#pairing-code-display'),
+  expiryTimer: $('#expiry-timer'),
+  verifyCodeInput: $('#verify-code-input'),
+  verifyPairBtn: $('#verify-pair-btn'),
   pairingStatus: $('#pairing-status'),
   navTabs: $('#nav-tabs'),
   mainContent: $('#main-content'),
@@ -559,10 +565,6 @@ async function publishTopic(topic, data) {
 
 async function loadStoreHistory() {
   const topics = ['/claku/1/discovery/proto', '/claku/1/channel/general/proto'];
-  // Also load the channel the user entered
-  if (state.channelCode && state.channelCode !== 'general') {
-    topics.push(`/claku/1/channel/${state.channelCode}/proto`);
-  }
   for (const topic of topics) {
     try {
       const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent(topic)}&pageSize=50&includeData=true&ascending=true`;
@@ -611,32 +613,123 @@ function switchTab(name) {
   if (name === 'circles') { closeCircle(); renderCircleList(); }
 }
 
+// ─── Pairing Timer ───
+function startExpiryTimer() {
+  if (!state.pairingExpiry) return;
+  const updateTimer = () => {
+    const now = Date.now();
+    const remaining = state.pairingExpiry - now;
+    if (remaining <= 0) {
+      dom.pairingCodeSection.classList.add('hidden');
+      dom.pairingStatus.textContent = 'Pairing code expired. Request a new one.';
+      dom.pairingStatus.className = 'pairing-status error';
+      state.pairingCode = null;
+      state.pairingExpiry = null;
+      return;
+    }
+    const mins = Math.floor(remaining / 60000);
+    const secs = Math.floor((remaining % 60000) / 1000);
+    dom.expiryTimer.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+    setTimeout(updateTimer, 1000);
+  };
+  updateTimer();
+}
+
 // ─── Pairing ───
-async function handlePair() {
-  const code = dom.codeInput.value.trim();
-  if (!code) { dom.pairingStatus.textContent = 'enter a channel code'; dom.pairingStatus.className = 'pairing-status error'; return; }
-  state.channelCode = code;
-  dom.pairingStatus.textContent = 'connecting...';
-  dom.pairingStatus.className = 'pairing-status';
-  dom.pairBtn.disabled = true;
-
-  const ok = await connectWaku();
-
-  state.paired = true;
-  dom.pairingSection.classList.add('hidden');
-  dom.navTabs.classList.remove('hidden');
-  dom.mainContent.classList.remove('hidden');
-  if (!state.channels.has('general')) state.channels.set('general', []);
-  if (code !== 'general' && !state.channels.has(code)) state.channels.set(code, []);
-  renderChannelList();
-
-  if (ok) {
-    await subscribeDefaults();
-    dom.pairingStatus.textContent = '';
-  } else {
-    addActivity('system', { text: 'offline mode — will auto-reconnect when gateway is available' });
+async function handleRequestPair() {
+  const email = dom.humanIdentifierInput.value.trim();
+  if (!email) { 
+    dom.pairingStatus.textContent = 'Please enter your email address'; 
+    dom.pairingStatus.className = 'pairing-status error'; 
+    return; 
   }
-  dom.pairBtn.disabled = false;
+  
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    dom.pairingStatus.textContent = 'Please enter a valid email address';
+    dom.pairingStatus.className = 'pairing-status error';
+    return;
+  }
+  
+  dom.pairingStatus.textContent = 'Requesting pairing code...';
+  dom.pairingStatus.className = 'pairing-status';
+  dom.requestPairBtn.disabled = true;
+  
+  try {
+    // In a real implementation, this would call the Claku CLI to generate a pairing code
+    // For now, we'll simulate it with a mock 6-digit code
+    const mockCode = '123456'; // This would be replaced with actual CLI integration
+    const expiryTime = Date.now() + (5 * 60 * 1000); // 5 minutes from now
+    
+    state.pairingCode = mockCode;
+    state.pairingExpiry = expiryTime;
+    state.humanIdentifier = email;
+    
+    dom.pairingCodeDisplay.textContent = mockCode;
+    dom.pairingCodeSection.classList.remove('hidden');
+    dom.pairingStatus.textContent = '';
+    dom.pairingStatus.className = 'pairing-status';
+    
+    startExpiryTimer();
+    
+  } catch (error) {
+    dom.pairingStatus.textContent = 'Failed to request pairing code. Please try again.';
+    dom.pairingStatus.className = 'pairing-status error';
+    console.error('Pairing request error:', error);
+  } finally {
+    dom.requestPairBtn.disabled = false;
+  }
+}
+
+async function handleVerifyPair() {
+  const code = dom.verifyCodeInput.value.trim();
+  if (!code) { 
+    dom.pairingStatus.textContent = 'Please enter the 6-digit code'; 
+    dom.pairingStatus.className = 'pairing-status error'; 
+    return; 
+  }
+  
+  if (code !== state.pairingCode) {
+    dom.pairingStatus.textContent = 'Invalid code. Please try again.';
+    dom.pairingStatus.className = 'pairing-status error';
+    return;
+  }
+  
+  if (Date.now() >= state.pairingExpiry) {
+    dom.pairingStatus.textContent = 'Code has expired. Request a new one.';
+    dom.pairingStatus.className = 'pairing-status error';
+    return;
+  }
+  
+  dom.pairingStatus.textContent = 'Verifying and connecting...';
+  dom.pairingStatus.className = 'pairing-status';
+  dom.verifyPairBtn.disabled = true;
+  
+  try {
+    const ok = await connectWaku();
+    
+    state.paired = true;
+    dom.pairingSection.classList.add('hidden');
+    dom.navTabs.classList.remove('hidden');
+    dom.mainContent.classList.remove('hidden');
+    
+    if (!state.channels.has('general')) state.channels.set('general', []);
+    renderChannelList();
+    
+    if (ok) {
+      await subscribeDefaults();
+      dom.pairingStatus.textContent = '';
+    } else {
+      addActivity('system', { text: 'offline mode — will auto-reconnect when gateway is available' });
+    }
+  } catch (error) {
+    dom.pairingStatus.textContent = 'Connection failed. Please try again.';
+    dom.pairingStatus.className = 'pairing-status error';
+    console.error('Pairing verification error:', error);
+  } finally {
+    dom.verifyPairBtn.disabled = false;
+  }
 }
 
 // ─── Send Channel Message ───
@@ -670,8 +763,10 @@ async function sendDm() {
 
 // ─── Init ───
 function init() {
-  dom.pairBtn.addEventListener('click', handlePair);
-  dom.codeInput.addEventListener('keydown', e => { if (e.key==='Enter') handlePair(); });
+  dom.requestPairBtn.addEventListener('click', handleRequestPair);
+  dom.humanIdentifierInput.addEventListener('keydown', e => { if (e.key==='Enter') handleRequestPair(); });
+  dom.verifyPairBtn.addEventListener('click', handleVerifyPair);
+  dom.verifyCodeInput.addEventListener('keydown', e => { if (e.key==='Enter') handleVerifyPair(); });
   $$('.tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
   dom.backToChannels.addEventListener('click', closeChannel);
   dom.refreshChannelsBtn.addEventListener('click', renderChannelList);
@@ -691,10 +786,6 @@ function init() {
   dom.proposalTitleInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitCreateProposal(); });
 
   renderActivity(); renderAgents(); renderChannelList(); renderDmList(); renderCircleList();
-
-  // Auto-pair from URL
-  const code = new URLSearchParams(location.search).get('code') || location.hash.slice(1);
-  if (code) { dom.codeInput.value = code; handlePair(); }
 }
 
 document.addEventListener('DOMContentLoaded', init);

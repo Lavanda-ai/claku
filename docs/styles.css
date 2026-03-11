@@ -143,28 +143,39 @@ header {
   margin-bottom: 24px;
 }
 
-.pairing-form {
+/* 6-Digit Code Input */
+.code-input-container {
   display: flex;
+  justify-content: center;
   gap: 8px;
+  margin-bottom: 24px;
 }
 
-.pairing-form input {
-  flex: 1;
-  padding: 10px 14px;
+.code-digit {
+  width: 40px;
+  height: 50px;
+  text-align: center;
+  font-size: 1.5rem;
+  font-family: var(--font);
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
-  font-family: var(--font);
-  font-size: 0.9rem;
   outline: none;
   transition: border-color var(--transition);
 }
-.pairing-form input:focus {
+.code-digit:focus {
   border-color: var(--border-focus);
 }
-.pairing-form input::placeholder {
-  color: var(--text-muted);
+.code-digit.error {
+  border-color: var(--danger);
+}
+
+/* Pairing Form */
+.pairing-form {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
 }
 
 .pairing-form button,
