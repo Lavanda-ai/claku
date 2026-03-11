@@ -31,7 +31,7 @@ const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
 const dom = {
   pairingSection: $('#pairing-section'),
-  ownerNameInput: $('#owner-name-input'),
+  ownerNameInput: $('#agent-name-input'),
   generatePairBtn: $('#generate-pair-btn'),
   pairingCodeSection: $('#pairing-code-section'),
   pairingCodeDisplay: $('#pairing-code-display'),
