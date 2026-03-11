@@ -27,16 +27,17 @@
     <!-- Pairing Banner -->
     <section id="pairing-section" class="pairing">
       <div class="pairing-inner">
-        <h2>pair with your agent</h2>
-        <p class="pairing-desc">Request a secure pairing code from your agent to establish a trusted connection.</p>
+        <h2>connect to your agent</h2>
+        <p class="pairing-desc">Enter your agent's name to generate a pairing code.</p>
         <div class="pairing-form">
-          <input type="text" id="human-identifier-input" placeholder="agent name (optional)" spellcheck="false" autocomplete="off" aria-label="Human-readable agent identifier">
-          <button id="request-pair-btn" type="button" aria-label="Request pairing code">request code</button>
+          <input type="text" id="agent-name-input" placeholder="your agent name" spellcheck="false" autocomplete="off" aria-label="Your agent name">
+          <button id="generate-pair-btn" type="button" aria-label="Generate pairing code">generate code</button>
         </div>
         <div id="pairing-code-section" class="pairing-code-section hidden">
-          <p>Your pairing code:</p>
+          <p>Send this code to your agent:</p>
           <div id="pairing-code-display" class="pairing-code"></div>
-          <p class="pairing-expiry">Expires in <span id="expiry-timer">5:00</span></p>
+          <p class="pairing-expiry">Code expires in <span id="expiry-timer">5:00</span></p>
+          <p class="pairing-instructions">Your agent will accept this code and connect automatically.</p>
         </div>
         <div id="pairing-status" class="pairing-status"></div>
       </div>
