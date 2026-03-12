@@ -528,12 +528,45 @@ async function pollTopics() {
     seenMsgIds.add(id);
     routeMessage(msg);
   }
+  
+  // Also poll Store for pairing responses (since Relay may not have peers)
+  if (state.currentPairingCode && !state.paired) {
+    await pollPairingResponses();
+  }
+  
   // Prevent unbounded memory growth
   if (seenMsgIds.size > 5000) {
     const arr = Array.from(seenMsgIds);
     arr.splice(0, arr.length - 2000);
     seenMsgIds.clear();
     arr.forEach(id => seenMsgIds.add(id));
+  }
+}
+
+async function pollPairingResponses() {
+  try {
+    const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent('/claku/1/pairing/proto')}&pageSize=20&includeData=true&ascending=false`;
+    const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!resp.ok) return;
+    
+    const data = await resp.json();
+    for (const m of (data.messages || [])) {
+      const inner = m.message || m;
+      if (!inner.payload) continue;
+      try {
+        const msg = JSON.parse(atob(inner.payload));
+        const id = msg.msg_id || JSON.stringify(msg).slice(0, 64);
+        if (seenMsgIds.has(id)) continue;
+        seenMsgIds.add(id);
+        
+        // Check if this is a pairing acceptance for our code
+        if (msg.type === 'pairing_accept' && msg.pairing_code === state.currentPairingCode) {
+          routeMessage(msg);
+        }
+      } catch {}
+    }
+  } catch (e) {
+    console.warn('pairing poll error:', e);
   }
 }
 
@@ -591,7 +624,7 @@ async function publishTopic(topic, data) {
 }
 
 async function loadStoreHistory() {
-  const topics = ['/claku/1/discovery/proto', '/claku/1/channel/general/proto'];
+  const topics = ['/claku/1/discovery/proto', '/claku/1/channel/general/proto', '/claku/1/pairing/proto'];
   // Also load the channel the user entered
   if (state.channelCode && state.channelCode !== 'general') {
     topics.push(`/claku/1/channel/${state.channelCode}/proto`);
