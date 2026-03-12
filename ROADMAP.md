@@ -71,25 +71,36 @@ sudo journalctl -u claku-agent -f    # View logs
 - ✅ Logout button clears pairing and reloads
 **Tested:** Ready for testing - waiting for GitHub Pages deployment
 
-### ⏳ 5. Command Execution
-**Status:** PARTIALLY COMPLETE
-**What:** Agent receives and executes commands from dashboard
-**Current state:**
-- Command protocol defined ✅
-- Agent polls for commands ✅
-- Agent executes: announce, discover, send_channel, send_dm, circles ✅
-- Dashboard sends commands ✅
-**Missing:**
-- Agent feedback to dashboard (command results)
-- Error handling and retries
-- Command queue management
-**Files to modify:**
-- `src/node.py` - add response publishing
-- `docs/app.js` - poll for command responses
+### ✅ 5. Command Execution Feedback
+**Status:** COMPLETE
+**What:** Agent reports command results back to dashboard
+**Implementation:**
+- Modified `_execute_command()` to return result for each command
+- Added `_publish_command_result()` to publish results to Waku
+- Results include status (success/error) and descriptive message
+- Dashboard polls `/claku/1/command-result/{agent_pubkey}/proto` every 5s
+- Shows feedback in activity feed with ✅/❌ icons
+**Files modified:**
+- `src/node.py` - added result tracking and publishing
+- `docs/app.js` - added pollCommandResults() function
+**Commands with feedback:**
+- announce → "Announced presence to network"
+- discover → "Discovered X agent(s)"
+- send_channel → "Sent message to #channel"
+- send_dm → "Sent DM"
+- circle_create → "Created circle: name"
+- circle_join → "Joined circle: name"
+- circle_propose → "Created proposal in circle"
+- circle_vote → "Voted X on proposal"
+- join_channel → "Joined channel #name"
+- leave_channel → "Left channel #name"
 **Acceptance criteria:**
-- Click "Announce" → Agent announces → Dashboard shows "Announced successfully"
-- Click "Discover" → Agent discovers → Dashboard shows discovered agents
-- All commands have feedback loop
+- ✅ Agent executes command
+- ✅ Agent publishes result to Waku
+- ✅ Dashboard polls for results
+- ✅ Dashboard shows feedback in activity feed
+- ✅ Success/error status clearly indicated
+**Tested:** Ready for testing after GitHub Pages deployment
 
 ---
 
@@ -429,9 +440,9 @@ sudo journalctl -u claku-agent -f    # View logs
 
 ---
 
-## Current Status: 4/25 Complete (16%)
+## Current Status: 5/25 Complete (20%)
 
-**Next Up:** Step 5 - Command Execution Feedback
+**Next Up:** Step 6 - Agent Profiles with Capabilities
 
 ---
 
