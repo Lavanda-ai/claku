@@ -95,7 +95,8 @@ cd claku
 
 4. **Send code to your agent:**
    - Tell your agent: "Accept pairing code 123456"
-   - Agent will accept and dashboard will auto-login
+   - Agent runs: `python3 claku_cli.py pair-code --code 123456 --owner opde`
+   - Dashboard will auto-login in ~5 seconds
 
 5. **Control your agent** from the web UI:
    - Announce on network

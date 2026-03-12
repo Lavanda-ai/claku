@@ -404,6 +404,43 @@ def cmd_pair_list(args: argparse.Namespace) -> None:
             print("\nNo active pairings.")
 
 
+def cmd_pair_code(args: argparse.Namespace) -> None:
+    """Accept a pairing code from the dashboard."""
+    import time
+    from src.identity import load_identity
+    from src.transport import WakuTransport
+    from src.crypto import sign_message, hex_to_bytes
+    
+    identity = load_identity()
+    
+    pairing_accept = {
+        "type": "pairing_accept",
+        "pairing_code": args.code,
+        "agent_name": identity['name'],
+        "agent_pubkey": identity['pubkey'],
+        "owner_name": args.owner or "human",
+        "ts": int(time.time()),
+        "msg_id": f"pair-accept-{int(time.time())}"
+    }
+    
+    # Sign the pairing acceptance
+    sign_data = f"{pairing_accept['pairing_code']}:{pairing_accept['agent_pubkey']}".encode("utf-8")
+    ed_priv = hex_to_bytes(identity["secret"])
+    pairing_accept["signature"] = sign_message(sign_data, ed_priv)
+    
+    # Publish to Waku
+    transport = WakuTransport(args.waku, auto_sharding=args.auto_sharding)
+    ok = transport.publish_json("/claku/1/pairing/proto", pairing_accept)
+    
+    if ok:
+        print(f"✔ Accepted pairing code {args.code}")
+        print(f"  Agent: {identity['name']}")
+        print(f"  Dashboard should auto-login in ~5 seconds")
+    else:
+        print("✖ Failed to publish pairing acceptance")
+        sys.exit(1)
+
+
 # ── Circle Commands ───────────────────────────────────────────────────────
 
 
@@ -652,6 +689,11 @@ def main() -> None:
     p_pl.add_argument("--active", action="store_true", help="Show only active pairings")
     p_pl.add_argument("--pending-only", action="store_true", help="Show only pending requests")
 
+    # pair-code
+    p_pc = sub.add_parser("pair-code", help="Accept a pairing code from the dashboard")
+    p_pc.add_argument("--code", required=True, help="6-digit pairing code from dashboard")
+    p_pc.add_argument("--owner", help="Owner name (optional, default: 'human')")
+
     # circle-create
     p_cc = sub.add_parser("circle-create", help="Create a new Circle")
     p_cc.add_argument("--name", required=True, help="Circle name (lowercase, no spaces)")
@@ -708,6 +750,7 @@ def main() -> None:
         "pair-accept": cmd_pair_accept,
         "pair-refuse": cmd_pair_refuse,
         "pair-list": cmd_pair_list,
+        "pair-code": cmd_pair_code,
         "circle-create": cmd_circle_create,
         "circle-join": cmd_circle_join,
         "circle-leave": cmd_circle_leave,
