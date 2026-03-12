@@ -149,44 +149,86 @@ def cmd_version(args: argparse.Namespace) -> None:
 
 
 def cmd_run(args: argparse.Namespace) -> None:
-    """Run a single poll cycle across all topics."""
+    """Run a single poll cycle across all topics, or loop continuously."""
+    import time
+    
     identity = _require_identity()
     node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
-    results = node.run_once()
+    
+    if args.loop:
+        print(f"🪻 Starting {identity['name']} in continuous polling mode...")
+        print(f"   Press Ctrl+C to stop")
+        print()
+        
+        cycle = 0
+        try:
+            while True:
+                cycle += 1
+                print(f"[Cycle {cycle}] Polling at {time.strftime('%H:%M:%S')}...")
+                
+                results = node.run_once()
+                
+                discovered = results.get("discovered", [])
+                dms = results.get("dms", [])
+                tasks = results.get("tasks", [])
+                commands = results.get("commands", [])
+                channels = results.get("channels", {})
+                circles = results.get("circles", {})
+                
+                # Only print if there's activity
+                total = len(discovered) + len(dms) + len(tasks) + len(commands) + sum(len(v) for v in channels.values())
+                if total > 0:
+                    print(f"  ✓ Activity: {len(discovered)} agents, {len(commands)} commands, {len(dms)} DMs, {sum(len(v) for v in channels.values())} messages")
+                    
+                    for cmd in commands[:3]:
+                        print(f"    [CMD] {cmd.get('command', '?')} from {cmd.get('from', '?')}")
+                    for dm in dms[:3]:
+                        print(f"    [DM] {dm.get('from', '?')}: {dm.get('text', '')[:60]}")
+                else:
+                    print(f"  ○ No activity")
+                
+                time.sleep(args.interval)
+                
+        except KeyboardInterrupt:
+            print(f"\n🪻 {identity['name']} stopped gracefully")
+            sys.exit(0)
+    else:
+        # Single poll cycle (original behavior)
+        results = node.run_once()
 
-    discovered = results.get("discovered", [])
-    dms = results.get("dms", [])
-    tasks = results.get("tasks", [])
-    commands = results.get("commands", [])
-    channels = results.get("channels", {})
-    circles = results.get("circles", {})
+        discovered = results.get("discovered", [])
+        dms = results.get("dms", [])
+        tasks = results.get("tasks", [])
+        commands = results.get("commands", [])
+        channels = results.get("channels", {})
+        circles = results.get("circles", {})
 
-    total = len(discovered) + len(dms) + len(tasks) + len(commands) + sum(len(v) for v in channels.values())
-    print(f"Poll cycle complete:")
-    print(f"  Agents discovered: {len(discovered)}")
-    print(f"  DMs received: {len(dms)}")
-    print(f"  Tasks: {len(tasks)}")
-    print(f"  Commands: {len(commands)}")
-    print(f"  Channel messages: {sum(len(v) for v in channels.values())} across {len(channels)} channel(s)")
-    print(f"  Circle activity: {len(circles)} circle(s) with updates")
+        total = len(discovered) + len(dms) + len(tasks) + len(commands) + sum(len(v) for v in channels.values())
+        print(f"Poll cycle complete:")
+        print(f"  Agents discovered: {len(discovered)}")
+        print(f"  DMs received: {len(dms)}")
+        print(f"  Tasks: {len(tasks)}")
+        print(f"  Commands: {len(commands)}")
+        print(f"  Channel messages: {sum(len(v) for v in channels.values())} across {len(channels)} channel(s)")
+        print(f"  Circle activity: {len(circles)} circle(s) with updates")
 
-    for name, agents in [("Discovered", discovered)]:
-        for a in agents[:5]:
-            print(f"    → {a.get('name', '?')} ({a.get('pubkey', '?')[:16]}...)")
-    for ch, msgs in channels.items():
-        for m in msgs[:3]:
-            print(f"    [{ch}] {m.get('from', '?')}: {m.get('text', '')[:60]}")
-    for dm in dms[:3]:
-        print(f"    [DM] {dm.get('from', '?')}: {dm.get('text', '')[:60]}")
-    for cmd in commands[:3]:
-        print(f"    [CMD] {cmd.get('command', '?')} from {cmd.get('from', '?')}")
-    for cname, cdata in circles.items():
-        props = cdata.get("proposals", [])
-        votes = cdata.get("votes", [])
-        if props:
-            print(f"    [⊙ {cname}] {len(props)} new proposal(s)")
-        if votes:
-            print(f"    [⊙ {cname}] {len(votes)} new vote(s)")
+        for name, agents in [("Discovered", discovered)]:
+            for a in agents[:5]:
+                print(f"    → {a.get('name', '?')} ({a.get('pubkey', '?')[:16]}...)")
+        for ch, msgs in channels.items():
+            for m in msgs[:3]:
+                print(f"    [{ch}] {m.get('from', '?')}: {m.get('text', '')[:60]}")
+        for dm in dms[:3]:
+            print(f"    [DM] {dm.get('from', '?')}: {dm.get('text', '')[:60]}")
+        for cmd in commands[:3]:
+            print(f"    [CMD] {cmd.get('command', '?')} from {cmd.get('from', '?')}")
+        for cname, cdata in circles.items():
+            props = cdata.get("proposals", [])
+            votes = cdata.get("votes", [])
+            if props:
+                print(f"    [⊙ {cname}] {len(props)} new proposal(s)")
+            if votes:
+                print(f"    [⊙ {cname}] {len(votes)} new vote(s)")
 
 
 def cmd_history(args: argparse.Namespace) -> None:
@@ -649,7 +691,9 @@ def main() -> None:
     # status / dashboard / identity
     sub.add_parser("status", help="Check nwaku node health")
     sub.add_parser("version", help="Show Claku version and config")
-    sub.add_parser("run", help="Run a single poll cycle across all topics")
+    p_run = sub.add_parser("run", help="Run a single poll cycle across all topics")
+    p_run.add_argument("--loop", action="store_true", help="Run continuously (for systemd service)")
+    p_run.add_argument("--interval", type=int, default=5, help="Seconds between polls in loop mode (default: 5)")
 
     p_hist = sub.add_parser("history", help="Query historical messages from Waku Store")
     p_hist.add_argument("--channel", help="Filter by channel name")
