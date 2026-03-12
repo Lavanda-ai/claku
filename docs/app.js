@@ -653,6 +653,8 @@ async function relayPoll() {
 }
 
 async function pollTopics() {
+  dom.pollingIndicator?.classList.add('active');
+  
   const msgs = await relayPoll();
   for (const msg of msgs) {
     const id = msg.msg_id || msg.pubkey || JSON.stringify(msg).slice(0, 64);
@@ -678,6 +680,8 @@ async function pollTopics() {
     seenMsgIds.clear();
     arr.forEach(id => seenMsgIds.add(id));
   }
+  
+  setTimeout(() => dom.pollingIndicator?.classList.remove('active'), 300);
 }
 
 async function pollStoreMessages() {
@@ -1022,6 +1026,7 @@ async function init() {
     agentAnnounceBtn: $('#agent-announce-btn'),
     agentDiscoverBtn: $('#agent-discover-btn'),
     agentLogsBtn: $('#agent-logs-btn'),
+    pollingIndicator: $('#polling-indicator'),
     navTabs: $('#nav-tabs'),
     mainContent: $('#main-content'),
     healthDot: $('#health-indicator'),
