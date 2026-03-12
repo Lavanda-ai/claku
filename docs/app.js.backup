@@ -16,7 +16,6 @@ const PAIRING_TOPIC = `${TOPIC_PREFIX}/pairing/proto`;
 // ─── State ───
 const state = {
   node: null, paired: false, ownerName: null,
-  pairedAgentPubkey: null, pairedAgentName: null,
   agents: new Map(), channels: new Map(), dms: new Map(),
   circles: new Map(), currentCircle: null,
   activity: [], currentChannel: null, currentDmPeer: null,
@@ -30,7 +29,76 @@ const state = {
 // ─── DOM ───
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
-let dom = {}; // Will be populated in init()
+const dom = {
+  pairingSection: $('#pairing-section'),
+  ownerNameInput: $('#agent-name-input'),
+  generatePairBtn: $('#generate-pair-btn'),
+  pairingCodeSection: $('#pairing-code-section'),
+  pairingCodeDisplay: $('#pairing-code-display'),
+  expiryTimer: $('#expiry-timer'),
+  pairingStatus: $('#pairing-status'),
+  navTabs: $('#nav-tabs'),
+  mainContent: $('#main-content'),
+  healthDot: $('#health-indicator'),
+  healthText: $('#health-text'),
+  activityFeed: $('#activity-feed'),
+  activityCount: $('#activity-count'),
+  channelList: $('#channel-list'),
+  channelView: $('#channel-view'),
+  channelViewName: $('#channel-view-name'),
+  channelMessages: $('#channel-messages'),
+  channelMsgInput: $('#channel-msg-input'),
+  channelSendBtn: $('#channel-send-btn'),
+  backToChannels: $('#back-to-channels'),
+  refreshChannelsBtn: $('#refresh-channels-btn'),
+  agentCards: $('#agent-cards'),
+  agentCount: $('#agent-count'),
+  dmList: $('#dm-list'),
+  dmView: $('#dm-view'),
+  dmPeerName: $('#dm-peer-name'),
+  dmEncBadge: $('#dm-encryption-badge'),
+  dmMessages: $('#dm-messages'),
+  dmMsgInput: $('#dm-msg-input'),
+  dmSendBtn: $('#dm-send-btn'),
+  backToDms: $('#back-to-dms'),
+  circleCount: $('#circle-count'),
+  circleList: $('#circle-list'),
+  circleView: $('#circle-view'),
+  circleViewName: $('#circle-view-name'),
+  circleViewMembers: $('#circle-view-members'),
+  circleViewDesc: $('#circle-view-desc'),
+  proposalList: $('#proposal-list'),
+  createCircleBtn: $('#create-circle-btn'),
+  circleCreateForm: $('#circle-create-form'),
+  cancelCreateCircle: $('#cancel-create-circle'),
+  circleNameInput: $('#circle-name-input'),
+  circleDescInput: $('#circle-desc-input'),
+  submitCreateCircle: $('#submit-create-circle'),
+  backToCircles: $('#back-to-circles'),
+  newProposalBtn: $('#new-proposal-btn'),
+  proposalCreateForm: $('#proposal-create-form'),
+  cancelCreateProposal: $('#cancel-create-proposal'),
+  proposalTitleInput: $('#proposal-title-input'),
+  proposalDescInput: $('#proposal-desc-input'),
+  proposalDeadlineInput: $('#proposal-deadline-input'),
+  submitCreateProposal: $('#submit-create-proposal'),
+  claimModal: $('#claim-modal'),
+  closeClaimModal: $('#close-claim-modal'),
+  claimChallengeText: $('#claim-challenge-text'),
+  copyChallenge: $('#copy-challenge'),
+  claimSignatureInput: $('#claim-signature-input'),
+  claimStatus: $('#claim-status'),
+  submitClaim: $('#submit-claim'),
+  agentManagement: $('#agent-management'),
+  closeAgentManagement: $('#close-agent-management'),
+  agentBlockedToggle: $('#agent-blocked-toggle'),
+  agentActiveToggle: $('#agent-active-toggle'),
+  agentAutoAnnounce: $('#agent-auto-announce'),
+  agentAllowDms: $('#agent-allow-dms'),
+  agentMaxChannels: $('#agent-max-channels'),
+  unclaimAgentBtn: $('#unclaim-agent-btn'),
+  saveSettingsBtn: $('#save-settings-btn'),
+};
 
 // ─── Utilities ───
 function fmtTime(ts) {
@@ -429,36 +497,31 @@ function handlePairingSuccess(agentMsg) {
   // Successfully paired!
   state.paired = true;
   state.ownerName = dom.ownerNameInput.value.trim() || 'anonymous';
-  state.pairedAgentPubkey = agentMsg.agent_pubkey || agentMsg.pubkey;
-  state.pairedAgentName = agentMsg.agent_name || agentMsg.name;
   
   dom.pairingSection.classList.add('hidden');
   dom.navTabs.classList.remove('hidden');
-  dom.agentStatusPanel.classList.remove('hidden');
   dom.mainContent.classList.remove('hidden');
-  
-  // Update agent status panel
-  dom.pairedAgentName.textContent = state.pairedAgentName;
-  dom.pairedAgentPubkey.textContent = state.pairedAgentPubkey.slice(0, 12) + '...';
   
   if (!state.channels.has('general')) state.channels.set('general', []);
   renderChannelList();
   
   addActivity('pairing_accept', { 
-    text: `Successfully paired with agent ${state.pairedAgentName}`,
-    agent_name: state.pairedAgentName
+    text: `Successfully paired with agent ${agentMsg.name || agentMsg.from}`,
+    agent_name: agentMsg.name || agentMsg.from
   });
   
   // Auto-claim the agent that just accepted pairing
-  const agentPubkey = agentMsg.agent_pubkey || agentMsg.pubkey;
-  if (agentPubkey) {
+  const agentPubkey = agentMsg.pubkey || agentMsg.from_pubkey;
+  if (agentPubkey && state.agents.has(agentPubkey)) {
+    const agent = state.agents.get(agentPubkey);
+    // Mark as claimed
     state.claimedAgents.push({
       pubkey: agentPubkey,
-      name: state.pairedAgentName,
+      name: agent.name,
       claimedAt: nowTs(),
       settings: { blocked: false, active: true, autoAnnounce: true, allowDms: true, maxChannels: 10 }
     });
-    addActivity('system', { text: `Agent ${state.pairedAgentName} automatically claimed` });
+    addActivity('system', { text: `Agent ${agent.name} automatically claimed` });
   }
 }
 
@@ -534,17 +597,6 @@ async function pollTopics() {
     seenMsgIds.add(id);
     routeMessage(msg);
   }
-  
-  // Poll Store for all message types (since Relay has no peers)
-  if (state.paired) {
-    await pollStoreMessages();
-  }
-  
-  // Also poll Store for pairing responses (since Relay may not have peers)
-  if (state.currentPairingCode && !state.paired) {
-    await pollPairingResponses();
-  }
-  
   // Prevent unbounded memory growth
   if (seenMsgIds.size > 5000) {
     const arr = Array.from(seenMsgIds);
@@ -554,67 +606,9 @@ async function pollTopics() {
   }
 }
 
-async function pollStoreMessages() {
-  // Poll discovery, channels, and circles from Store
-  const topics = [
-    '/claku/1/discovery/proto',
-    '/claku/1/channel/general/proto',
-  ];
-  
-  for (const topic of topics) {
-    try {
-      const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent(topic)}&pageSize=50&includeData=true&ascending=false`;
-      const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
-      if (!resp.ok) continue;
-      
-      const data = await resp.json();
-      for (const m of (data.messages || [])) {
-        const inner = m.message || m;
-        if (!inner.payload) continue;
-        try {
-          const msg = JSON.parse(atob(inner.payload));
-          const id = msg.msg_id || msg.pubkey || JSON.stringify(msg).slice(0, 64);
-          if (seenMsgIds.has(id)) continue;
-          seenMsgIds.add(id);
-          routeMessage(msg);
-        } catch {}
-      }
-    } catch (e) {
-      console.warn(`store poll error for ${topic}:`, e);
-    }
-  }
-}
-
-async function pollPairingResponses() {
-  try {
-    const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent('/claku/1/pairing/proto')}&pageSize=20&includeData=true&ascending=false`;
-    const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (!resp.ok) return;
-    
-    const data = await resp.json();
-    for (const m of (data.messages || [])) {
-      const inner = m.message || m;
-      if (!inner.payload) continue;
-      try {
-        const msg = JSON.parse(atob(inner.payload));
-        const id = msg.msg_id || JSON.stringify(msg).slice(0, 64);
-        if (seenMsgIds.has(id)) continue;
-        seenMsgIds.add(id);
-        
-        // Check if this is a pairing acceptance for our code
-        if (msg.type === 'pairing_accept' && msg.pairing_code === state.currentPairingCode) {
-          routeMessage(msg);
-        }
-      } catch {}
-    }
-  } catch (e) {
-    console.warn('pairing poll error:', e);
-  }
-}
-
 function startPolling() {
   pollTopics();
-  pollInterval = setInterval(pollTopics, 5000);
+  pollInterval = setInterval(pollTopics, 10000);
   // Periodic health check every 2 minutes
   setInterval(async () => {
     try {
@@ -666,7 +660,7 @@ async function publishTopic(topic, data) {
 }
 
 async function loadStoreHistory() {
-  const topics = ['/claku/1/discovery/proto', '/claku/1/channel/general/proto', '/claku/1/pairing/proto'];
+  const topics = ['/claku/1/discovery/proto', '/claku/1/channel/general/proto'];
   // Also load the channel the user entered
   if (state.channelCode && state.channelCode !== 'general') {
     topics.push(`/claku/1/channel/${state.channelCode}/proto`);
@@ -731,66 +725,31 @@ async function handleGeneratePair() {
   // Display code to user
   dom.pairingCodeDisplay.textContent = code;
   dom.pairingCodeSection.classList.remove('hidden');
-  dom.pairingStatus.textContent = 'Connecting to Waku network...';
+  dom.pairingStatus.textContent = '';
   dom.pairingStatus.className = 'pairing-status';
   dom.generatePairBtn.disabled = true;
   
   // Start expiry timer
   updateExpiryTimer();
   
-  // Publish pairing request to Waku
-  const pairingRequest = {
-    type: 'pairing_request',
-    pairing_code: code,
-    owner_name: ownerName,
-    created_at: nowTs(),
-    expires_at: state.pairingExpiry,
-    msg_id: crypto.randomUUID?.() || '' + Date.now(),
-    ts: nowTs()
-  };
+  // Add to activity feed
+  addActivity('pairing_request', { code, owner_name: ownerName });
   
-  // Publish to pairing topic
-  const ok = await publishTopic(PAIRING_TOPIC, pairingRequest);
-  
-  if (ok) {
-    // Add to activity feed
-    addActivity('pairing_request', { code, owner_name: ownerName });
-    
-    // Instructions for user
-    dom.pairingStatus.innerHTML = `Pairing request sent!<br>Code: <strong>${code}</strong><br>Waiting for agent to accept...`;
-    dom.pairingStatus.className = 'pairing-status success';
-  } else {
-    dom.pairingStatus.textContent = 'Failed to send pairing request. Check connection.';
-    dom.pairingStatus.className = 'pairing-status error';
-    dom.generatePairBtn.disabled = false;
-  }
+  // Instructions for user
+  dom.pairingStatus.innerHTML = `Send this code to your agent:<br><strong>${code}</strong><br>Example: "Lavanda, pair with code ${code}"`;
 }
 
 // ─── Send Channel Message ───
 async function sendChannelMsg() {
   const text = dom.channelMsgInput.value.trim();
   if (!text || !state.currentChannel) return;
-  
-  // Send command to agent to post the message
-  const command = {
-    type: 'command',
-    command: 'send_channel',
-    params: {
-      channel: state.currentChannel,
-      text: text
-    },
-    from: 'dashboard',
-    to: state.pairedAgentPubkey,
-    ts: nowTs(),
-    msg_id: 'cmd-' + (crypto.randomUUID?.() || Date.now())
+  const msg = {
+    type:'channel_msg', channel:'#'+state.currentChannel, from:'dashboard',
+    from_pubkey:'browser', text, msg_id: crypto.randomUUID?.() || ''+Date.now(),
+    ts: nowTs(), _verified:false,
   };
-  
-  const ok = await publishTopic(`/claku/1/command/${state.pairedAgentPubkey}/proto`, command);
-  if (ok) {
-    addActivity('system', { text: `Sent message to #${state.currentChannel}` });
-  } else {
-    addActivity('error', { text: 'Failed to send message' });
-  }
+  const ok = await publishTopic(channelTopic(state.currentChannel), msg);
+  if (ok) routeMessage(msg);
   dom.channelMsgInput.value = '';
 }
 
@@ -857,126 +816,8 @@ function hideAgentManagement() {
 
 // ─── Init ───
 function init() {
-  // Initialize DOM elements (must be done after DOMContentLoaded)
-  dom = {
-    pairingSection: $('#pairing-section'),
-    ownerNameInput: $('#agent-name-input'),
-    generatePairBtn: $('#generate-pair-btn'),
-    pairingCodeSection: $('#pairing-code-section'),
-    pairingCodeDisplay: $('#pairing-code-display'),
-    expiryTimer: $('#expiry-timer'),
-    pairingStatus: $('#pairing-status'),
-    agentStatusPanel: $('#agent-status-panel'),
-    pairedAgentName: $('#paired-agent-name'),
-    pairedAgentPubkey: $('#paired-agent-pubkey'),
-    agentOnlineStatus: $('#agent-online-status'),
-    agentAnnounceBtn: $('#agent-announce-btn'),
-    agentDiscoverBtn: $('#agent-discover-btn'),
-    agentLogsBtn: $('#agent-logs-btn'),
-    navTabs: $('#nav-tabs'),
-    mainContent: $('#main-content'),
-    healthDot: $('#health-indicator'),
-    healthText: $('#health-text'),
-    activityFeed: $('#activity-feed'),
-    activityCount: $('#activity-count'),
-    channelList: $('#channel-list'),
-    channelView: $('#channel-view'),
-    channelViewName: $('#channel-view-name'),
-    channelMessages: $('#channel-messages'),
-    channelMsgInput: $('#channel-msg-input'),
-    channelSendBtn: $('#channel-send-btn'),
-    backToChannels: $('#back-to-channels'),
-    refreshChannelsBtn: $('#refresh-channels-btn'),
-    agentCards: $('#agent-cards'),
-    agentCount: $('#agent-count'),
-    dmList: $('#dm-list'),
-    dmView: $('#dm-view'),
-    dmPeerName: $('#dm-peer-name'),
-    dmEncBadge: $('#dm-encryption-badge'),
-    dmMessages: $('#dm-messages'),
-    dmMsgInput: $('#dm-msg-input'),
-    dmSendBtn: $('#dm-send-btn'),
-    backToDms: $('#back-to-dms'),
-    circleCount: $('#circle-count'),
-    circleList: $('#circle-list'),
-    circleView: $('#circle-view'),
-    circleViewName: $('#circle-view-name'),
-    circleViewMembers: $('#circle-view-members'),
-    circleViewDesc: $('#circle-view-desc'),
-    proposalList: $('#proposal-list'),
-    createCircleBtn: $('#create-circle-btn'),
-    circleCreateForm: $('#circle-create-form'),
-    cancelCreateCircle: $('#cancel-create-circle'),
-    circleNameInput: $('#circle-name-input'),
-    circleDescInput: $('#circle-desc-input'),
-    submitCreateCircle: $('#submit-create-circle'),
-    backToCircles: $('#back-to-circles'),
-    newProposalBtn: $('#new-proposal-btn'),
-    proposalCreateForm: $('#proposal-create-form'),
-    cancelCreateProposal: $('#cancel-create-proposal'),
-    proposalTitleInput: $('#proposal-title-input'),
-    proposalDescInput: $('#proposal-desc-input'),
-    proposalDeadlineInput: $('#proposal-deadline-input'),
-    submitCreateProposal: $('#submit-create-proposal'),
-    claimModal: $('#claim-modal'),
-    closeClaimModal: $('#close-claim-modal'),
-    claimChallengeText: $('#claim-challenge-text'),
-    copyChallenge: $('#copy-challenge'),
-    claimSignatureInput: $('#claim-signature-input'),
-    claimStatus: $('#claim-status'),
-    submitClaim: $('#submit-claim'),
-    agentManagement: $('#agent-management'),
-    closeAgentManagement: $('#close-agent-management'),
-    agentBlockedToggle: $('#agent-blocked-toggle'),
-    agentActiveToggle: $('#agent-active-toggle'),
-    agentAutoAnnounce: $('#agent-auto-announce'),
-    agentAllowDms: $('#agent-allow-dms'),
-    agentMaxChannels: $('#agent-max-channels'),
-    unclaimAgentBtn: $('#unclaim-agent-btn'),
-    saveSettingsBtn: $('#save-settings-btn'),
-  };
-  
   dom.generatePairBtn.addEventListener('click', handleGeneratePair);
   dom.ownerNameInput.addEventListener('keydown', e => { if (e.key==='Enter') handleGeneratePair(); });
-  
-  // Quick action buttons
-  dom.agentAnnounceBtn.addEventListener('click', async () => {
-    const command = {
-      type: 'command',
-      command: 'announce',
-      params: {},
-      from: 'dashboard',
-      to: state.pairedAgentPubkey,
-      ts: nowTs(),
-      msg_id: 'cmd-' + (crypto.randomUUID?.() || Date.now())
-    };
-    const ok = await publishTopic(`/claku/1/command/${state.pairedAgentPubkey}/proto`, command);
-    if (ok) {
-      addActivity('system', { text: 'Requested agent to announce' });
-    }
-  });
-  
-  dom.agentDiscoverBtn.addEventListener('click', async () => {
-    const command = {
-      type: 'command',
-      command: 'discover',
-      params: {},
-      from: 'dashboard',
-      to: state.pairedAgentPubkey,
-      ts: nowTs(),
-      msg_id: 'cmd-' + (crypto.randomUUID?.() || Date.now())
-    };
-    const ok = await publishTopic(`/claku/1/command/${state.pairedAgentPubkey}/proto`, command);
-    if (ok) {
-      addActivity('system', { text: 'Requested agent to discover' });
-    }
-  });
-  
-  dom.agentLogsBtn.addEventListener('click', () => {
-    // TODO: Show agent logs modal
-    addActivity('system', { text: 'Agent logs feature coming soon' });
-  });
-  
   dom.closeClaimModal.addEventListener('click', hideClaimModal);
   dom.copyChallenge.addEventListener('click', () => {
     navigator.clipboard.writeText(dom.claimChallengeText.textContent);
@@ -1048,17 +889,6 @@ function init() {
   dom.proposalTitleInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitCreateProposal(); });
 
   renderActivity(); renderAgents(); renderChannelList(); renderDmList(); renderCircleList();
-  
-  // Connect to Waku network immediately on page load
-  setTimeout(async () => {
-    const ok = await connectWaku();
-    if (ok) {
-      // Start polling for messages (including pairing responses)
-      startPolling();
-    } else {
-      addActivity('system', { text: 'offline mode — will auto-reconnect when gateway is available' });
-    }
-  }, 500);
 }
 
 document.addEventListener('DOMContentLoaded', init);

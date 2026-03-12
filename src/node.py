@@ -552,6 +552,66 @@ class ClakuNode:
             })
         return tasks
 
+    def poll_commands(self) -> list[dict]:
+        """Poll for incoming commands from dashboard.
+
+        Returns:
+            List of command dicts.
+        """
+        topic = f"/claku/1/command/{self.identity['pubkey']}/proto"
+        messages = self.transport.poll_json(topic)
+        commands = [m for m in messages if m.get("type") == "command"]
+        
+        for cmd in commands:
+            self._log_dashboard("command_recv", {
+                "from": cmd.get("from", "unknown"),
+                "command": cmd.get("command", ""),
+                "msg_id": cmd.get("msg_id", ""),
+            })
+            
+            # Execute command
+            self._execute_command(cmd)
+        
+        return commands
+
+    def _execute_command(self, cmd: dict) -> None:
+        """Execute a command from the dashboard.
+
+        Args:
+            cmd: Command dict with 'command' and 'params' fields.
+        """
+        command = cmd.get("command")
+        params = cmd.get("params", {})
+        
+        try:
+            if command == "announce":
+                self.announce()
+            elif command == "discover":
+                self.discover()
+            elif command == "send_channel":
+                channel = params.get("channel", "").replace("#", "")
+                text = params.get("text", "")
+                if channel and text:
+                    self.send_channel(channel, text)
+            elif command == "join_channel":
+                channel = params.get("channel", "").replace("#", "")
+                if channel:
+                    self.channels.add(channel)
+            elif command == "leave_channel":
+                channel = params.get("channel", "").replace("#", "")
+                if channel and channel in self.channels:
+                    self.channels.remove(channel)
+            else:
+                self._log_dashboard("command_error", {
+                    "msg_id": cmd.get("msg_id"),
+                    "error": f"Unknown command: {command}"
+                })
+        except Exception as e:
+            self._log_dashboard("command_error", {
+                "msg_id": cmd.get("msg_id"),
+                "error": str(e)
+            })
+
     # ── Circles ────────────────────────────────────────────────────────────
 
     def circle_create(self, name: str, description: str = "") -> dict:
@@ -1106,16 +1166,17 @@ class ClakuNode:
     def run_once(self) -> dict:
         """Execute a single poll cycle across all message types.
 
-        Checks discovery, DMs, tasks, all joined channels, and all circles.
+        Checks discovery, DMs, tasks, commands, all joined channels, and all circles.
 
         Returns:
-            Dict with keys ``discovered``, ``dms``, ``tasks``,
+            Dict with keys ``discovered``, ``dms``, ``tasks``, ``commands``,
             ``channels``, and ``circles``.
         """
         results: dict = {
             "discovered": self.discover(),
             "dms": self.poll_dms(),
             "tasks": self.poll_tasks(),
+            "commands": self.poll_commands(),
             "channels": {},
             "circles": {},
         }

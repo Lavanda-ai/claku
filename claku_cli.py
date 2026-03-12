@@ -157,14 +157,16 @@ def cmd_run(args: argparse.Namespace) -> None:
     discovered = results.get("discovered", [])
     dms = results.get("dms", [])
     tasks = results.get("tasks", [])
+    commands = results.get("commands", [])
     channels = results.get("channels", {})
     circles = results.get("circles", {})
 
-    total = len(discovered) + len(dms) + len(tasks) + sum(len(v) for v in channels.values())
+    total = len(discovered) + len(dms) + len(tasks) + len(commands) + sum(len(v) for v in channels.values())
     print(f"Poll cycle complete:")
     print(f"  Agents discovered: {len(discovered)}")
     print(f"  DMs received: {len(dms)}")
     print(f"  Tasks: {len(tasks)}")
+    print(f"  Commands: {len(commands)}")
     print(f"  Channel messages: {sum(len(v) for v in channels.values())} across {len(channels)} channel(s)")
     print(f"  Circle activity: {len(circles)} circle(s) with updates")
 
@@ -176,6 +178,8 @@ def cmd_run(args: argparse.Namespace) -> None:
             print(f"    [{ch}] {m.get('from', '?')}: {m.get('text', '')[:60]}")
     for dm in dms[:3]:
         print(f"    [DM] {dm.get('from', '?')}: {dm.get('text', '')[:60]}")
+    for cmd in commands[:3]:
+        print(f"    [CMD] {cmd.get('command', '?')} from {cmd.get('from', '?')}")
     for cname, cdata in circles.items():
         props = cdata.get("proposals", [])
         votes = cdata.get("votes", [])

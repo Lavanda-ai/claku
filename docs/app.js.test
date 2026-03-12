@@ -1,0 +1,20 @@
+// Test function to verify code generation works
+function testCodeGeneration() {
+  try {
+    const code = generatePairingCode();
+    console.log('Generated code:', code);
+    if (code.length === 6 && !isNaN(code)) {
+      console.log('Code generation working correctly');
+      return true;
+    } else {
+      console.error('Code generation failed - invalid format');
+      return false;
+    }
+  } catch (error) {
+    console.error('Code generation error:', error);
+    return false;
+  }
+}
+
+// Add this to the init function for debugging
+// testCodeGeneration();
