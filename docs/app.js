@@ -646,6 +646,8 @@ async function relayPoll() {
 async function pollTopics() {
   dom.pollingIndicator?.classList.add('active');
   
+  console.log('[POLL] Starting poll cycle. state.paired:', state.paired, 'state.currentPairingCode:', state.currentPairingCode);
+  
   const msgs = await relayPoll();
   for (const msg of msgs) {
     const id = msg.msg_id || msg.pubkey || JSON.stringify(msg).slice(0, 64);
@@ -656,11 +658,13 @@ async function pollTopics() {
   
   // Poll Store for all message types (since Relay has no peers)
   if (state.paired) {
+    console.log('[POLL] Polling Store messages (paired mode)');
     await pollStoreMessages();
   }
   
   // Also poll Store for pairing responses (since Relay may not have peers)
   if (state.currentPairingCode && !state.paired) {
+    console.log('[POLL] Polling for pairing responses. Code:', state.currentPairingCode);
     await pollPairingResponses();
   }
   
@@ -719,30 +723,41 @@ async function pollStoreMessages() {
 async function pollPairingResponses() {
   try {
     const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent('/claku/1/pairing/proto')}&pageSize=20&includeData=true&ascending=false`;
+    console.log('[PAIRING] Fetching from Store:', url);
     const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (!resp.ok) return;
+    if (!resp.ok) {
+      console.warn('[PAIRING] Store fetch failed:', resp.status);
+      return;
+    }
     
     const data = await resp.json();
+    console.log('[PAIRING] Found', data.messages?.length || 0, 'messages in Store');
+    
     for (const m of (data.messages || [])) {
       const inner = m.message || m;
       if (!inner.payload) continue;
       try {
         const msg = JSON.parse(atob(inner.payload));
+        console.log('[PAIRING] Message type:', msg.type, 'code:', msg.pairing_code, 'looking for:', state.currentPairingCode);
+        
         const id = msg.msg_id || JSON.stringify(msg).slice(0, 64);
-        if (seenMsgIds.has(id)) continue;
+        if (seenMsgIds.has(id)) {
+          console.log('[PAIRING] Already seen message:', id.slice(0, 20));
+          continue;
+        }
         seenMsgIds.add(id);
         
         // Check if this is a pairing acceptance for our code
         if (msg.type === 'pairing_accept' && msg.pairing_code === state.currentPairingCode) {
-          console.log('Found pairing acceptance for code:', state.currentPairingCode);
+          console.log('✅ [PAIRING] Found pairing acceptance for code:', state.currentPairingCode);
           routeMessage(msg);
         }
       } catch (e) {
-        console.warn('Error parsing pairing message:', e);
+        console.warn('[PAIRING] Error parsing message:', e);
       }
     }
   } catch (e) {
-    console.warn('pairing poll error:', e);
+    console.warn('[PAIRING] Poll error:', e);
   }
 }
 
