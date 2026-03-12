@@ -1092,3 +1092,65 @@ button:disabled {
 .toast.visible { opacity: 1; }
 .toast.error { border-color: var(--danger); color: var(--danger); }
 .toast.success { border-color: var(--success); color: var(--success); }
+
+/* Agent Status Panel */
+.agent-status-panel {
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  padding: 16px 24px;
+}
+
+.status-panel-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.status-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.status-label {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-indicator {
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.status-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agent-name-display {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.agent-pubkey-display {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  font-family: var(--font);
+}
+
+.quick-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.quick-actions .btn-sm {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+}

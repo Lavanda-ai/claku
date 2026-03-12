@@ -52,6 +52,25 @@
       <button class="tab" data-tab="circles">circles</button>
     </nav>
 
+    <!-- Agent Status Panel -->
+    <section id="agent-status-panel" class="agent-status-panel hidden">
+      <div class="status-panel-inner">
+        <div class="status-header">
+          <span class="status-label">🤖 your agent</span>
+          <span id="agent-online-status" class="status-indicator">🟢 online</span>
+        </div>
+        <div class="status-info">
+          <div id="paired-agent-name" class="agent-name-display">test-agent</div>
+          <div id="paired-agent-pubkey" class="agent-pubkey-display">a5e112fd...</div>
+        </div>
+        <div class="quick-actions">
+          <button id="agent-announce-btn" class="btn-sm">announce</button>
+          <button id="agent-discover-btn" class="btn-sm">discover</button>
+          <button id="agent-logs-btn" class="btn-sm">logs</button>
+        </div>
+      </div>
+    </section>
+
     <!-- Main Content -->
     <main id="main-content" class="hidden">
 

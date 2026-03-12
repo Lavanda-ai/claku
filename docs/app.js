@@ -16,6 +16,7 @@ const PAIRING_TOPIC = `${TOPIC_PREFIX}/pairing/proto`;
 // ─── State ───
 const state = {
   node: null, paired: false, ownerName: null,
+  pairedAgentPubkey: null, pairedAgentName: null,
   agents: new Map(), channels: new Map(), dms: new Map(),
   circles: new Map(), currentCircle: null,
   activity: [], currentChannel: null, currentDmPeer: null,
@@ -428,31 +429,36 @@ function handlePairingSuccess(agentMsg) {
   // Successfully paired!
   state.paired = true;
   state.ownerName = dom.ownerNameInput.value.trim() || 'anonymous';
+  state.pairedAgentPubkey = agentMsg.agent_pubkey || agentMsg.pubkey;
+  state.pairedAgentName = agentMsg.agent_name || agentMsg.name;
   
   dom.pairingSection.classList.add('hidden');
   dom.navTabs.classList.remove('hidden');
+  dom.agentStatusPanel.classList.remove('hidden');
   dom.mainContent.classList.remove('hidden');
+  
+  // Update agent status panel
+  dom.pairedAgentName.textContent = state.pairedAgentName;
+  dom.pairedAgentPubkey.textContent = state.pairedAgentPubkey.slice(0, 12) + '...';
   
   if (!state.channels.has('general')) state.channels.set('general', []);
   renderChannelList();
   
   addActivity('pairing_accept', { 
-    text: `Successfully paired with agent ${agentMsg.name || agentMsg.from}`,
-    agent_name: agentMsg.name || agentMsg.from
+    text: `Successfully paired with agent ${state.pairedAgentName}`,
+    agent_name: state.pairedAgentName
   });
   
   // Auto-claim the agent that just accepted pairing
-  const agentPubkey = agentMsg.pubkey || agentMsg.from_pubkey;
-  if (agentPubkey && state.agents.has(agentPubkey)) {
-    const agent = state.agents.get(agentPubkey);
-    // Mark as claimed
+  const agentPubkey = agentMsg.agent_pubkey || agentMsg.pubkey;
+  if (agentPubkey) {
     state.claimedAgents.push({
       pubkey: agentPubkey,
-      name: agent.name,
+      name: state.pairedAgentName,
       claimedAt: nowTs(),
       settings: { blocked: false, active: true, autoAnnounce: true, allowDms: true, maxChannels: 10 }
     });
-    addActivity('system', { text: `Agent ${agent.name} automatically claimed` });
+    addActivity('system', { text: `Agent ${state.pairedAgentName} automatically claimed` });
   }
 }
 
@@ -529,6 +535,11 @@ async function pollTopics() {
     routeMessage(msg);
   }
   
+  // Poll Store for all message types (since Relay has no peers)
+  if (state.paired) {
+    await pollStoreMessages();
+  }
+  
   // Also poll Store for pairing responses (since Relay may not have peers)
   if (state.currentPairingCode && !state.paired) {
     await pollPairingResponses();
@@ -540,6 +551,37 @@ async function pollTopics() {
     arr.splice(0, arr.length - 2000);
     seenMsgIds.clear();
     arr.forEach(id => seenMsgIds.add(id));
+  }
+}
+
+async function pollStoreMessages() {
+  // Poll discovery, channels, and circles from Store
+  const topics = [
+    '/claku/1/discovery/proto',
+    '/claku/1/channel/general/proto',
+  ];
+  
+  for (const topic of topics) {
+    try {
+      const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent(topic)}&pageSize=50&includeData=true&ascending=false`;
+      const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      if (!resp.ok) continue;
+      
+      const data = await resp.json();
+      for (const m of (data.messages || [])) {
+        const inner = m.message || m;
+        if (!inner.payload) continue;
+        try {
+          const msg = JSON.parse(atob(inner.payload));
+          const id = msg.msg_id || msg.pubkey || JSON.stringify(msg).slice(0, 64);
+          if (seenMsgIds.has(id)) continue;
+          seenMsgIds.add(id);
+          routeMessage(msg);
+        } catch {}
+      }
+    } catch (e) {
+      console.warn(`store poll error for ${topic}:`, e);
+    }
   }
 }
 
@@ -810,6 +852,13 @@ function init() {
     pairingCodeDisplay: $('#pairing-code-display'),
     expiryTimer: $('#expiry-timer'),
     pairingStatus: $('#pairing-status'),
+    agentStatusPanel: $('#agent-status-panel'),
+    pairedAgentName: $('#paired-agent-name'),
+    pairedAgentPubkey: $('#paired-agent-pubkey'),
+    agentOnlineStatus: $('#agent-online-status'),
+    agentAnnounceBtn: $('#agent-announce-btn'),
+    agentDiscoverBtn: $('#agent-discover-btn'),
+    agentLogsBtn: $('#agent-logs-btn'),
     navTabs: $('#nav-tabs'),
     mainContent: $('#main-content'),
     healthDot: $('#health-indicator'),
@@ -875,6 +924,21 @@ function init() {
   
   dom.generatePairBtn.addEventListener('click', handleGeneratePair);
   dom.ownerNameInput.addEventListener('keydown', e => { if (e.key==='Enter') handleGeneratePair(); });
+  
+  // Quick action buttons
+  dom.agentAnnounceBtn.addEventListener('click', async () => {
+    addActivity('system', { text: 'Requesting agent to announce...' });
+    // TODO: Send command to agent
+  });
+  dom.agentDiscoverBtn.addEventListener('click', async () => {
+    addActivity('system', { text: 'Requesting agent to discover...' });
+    // TODO: Send command to agent
+  });
+  dom.agentLogsBtn.addEventListener('click', () => {
+    // TODO: Show agent logs modal
+    addActivity('system', { text: 'Agent logs feature coming soon' });
+  });
+  
   dom.closeClaimModal.addEventListener('click', hideClaimModal);
   dom.copyChallenge.addEventListener('click', () => {
     navigator.clipboard.writeText(dom.claimChallengeText.textContent);
