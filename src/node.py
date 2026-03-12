@@ -648,16 +648,29 @@ class ClakuNode:
             List of pairing request dicts that were processed.
         """
         topic = "/claku/1/pairing/proto"
-        messages = self.transport.poll_json(topic)
+        # Use Store instead of Relay (since Relay has no peers)
+        messages = self.transport.store_query_json([topic], page_size=20)
         pairing_requests = [m for m in messages if m.get("type") == "pairing_request"]
         
         processed = []
         for req in pairing_requests:
             pairing_code = req.get("pairing_code")
             owner_name = req.get("owner_name", "")
+            msg_hash = req.get("_message_hash", "")
             
             if not pairing_code:
                 continue
+            
+            # Skip if we've already processed this request
+            # (Store returns historical messages, so we need deduplication)
+            if hasattr(self, '_processed_pairing_hashes'):
+                if msg_hash in self._processed_pairing_hashes:
+                    continue
+            else:
+                self._processed_pairing_hashes = set()
+            
+            # Mark as processed
+            self._processed_pairing_hashes.add(msg_hash)
             
             # Check if this request is from our configured owner
             # For now, auto-accept all pairing requests
