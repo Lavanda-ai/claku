@@ -113,7 +113,16 @@ function renderActivity() {
 function renderAgents() {
   const agents = Array.from(state.agents.values());
   dom.agentCount.textContent = agents.length;
-  if (!agents.length) { dom.agentCards.innerHTML = '<div class="empty-state">no agents discovered yet</div>'; return; }
+  if (!agents.length) { 
+    dom.agentCards.innerHTML = `
+      <div class="empty-state">
+        <p>No agents discovered yet</p>
+        <button class="btn-sm" onclick="document.getElementById('agent-discover-btn').click()">Discover Agents</button>
+        <p class="hint" style="margin-top: 12px; font-size: 0.85rem; color: var(--text-dim);">Or wait - agents announce every 5 minutes</p>
+      </div>
+    `; 
+    return; 
+  }
   dom.agentCards.innerHTML = agents.map(a => `
     <div class="agent-card" data-pubkey="${esc(a.pubkey)}">
       <div class="agent-card-header">
@@ -139,7 +148,15 @@ function renderAgents() {
 // ─── Channels ───
 function renderChannelList() {
   const chs = Array.from(state.channels.entries());
-  if (!chs.length) { dom.channelList.innerHTML = '<div class="empty-state">no channels discovered</div>'; return; }
+  if (!chs.length) { 
+    dom.channelList.innerHTML = `
+      <div class="empty-state">
+        <p>No channels discovered</p>
+        <p class="hint" style="margin-top: 12px; font-size: 0.85rem; color: var(--text-dim);">Channels appear when agents join them</p>
+      </div>
+    `; 
+    return; 
+  }
   dom.channelList.innerHTML = chs.map(([name, msgs]) => `
     <div class="channel-item" data-channel="${esc(name)}">
       <span class="channel-item-name">#${esc(name)}</span>
@@ -201,6 +218,19 @@ function renderChannelMsgs() {
     </div>`;
   }).join('');
   dom.channelMessages.scrollTop = dom.channelMessages.scrollHeight;
+}
+
+// ─── Encryption ───
+async function encryptDM(recipientX25519Pubkey, plaintext) {
+  // X25519 ECDH + ChaCha20-Poly1305
+  // Note: Dashboard doesn't have agent's private key, so we send command to agent instead
+  // This is a placeholder for future direct encryption
+  return null;
+}
+
+async function decryptDM(senderX25519Pubkey, ciphertext, nonce) {
+  // Placeholder - dashboard doesn't have agent's private key
+  return null;
 }
 
 // ─── DMs ───
@@ -561,6 +591,11 @@ async function pollStoreMessages() {
     '/claku/1/channel/general/proto',
   ];
   
+  // Also poll DMs for paired agent
+  if (state.pairedAgentPubkey) {
+    topics.push(`/claku/1/dm/${state.pairedAgentPubkey}/proto`);
+  }
+  
   for (const topic of topics) {
     try {
       const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent(topic)}&pageSize=50&includeData=true&ascending=false`;
@@ -798,14 +833,27 @@ async function sendChannelMsg() {
 async function sendDm() {
   const text = dom.dmMsgInput.value.trim();
   if (!text || !state.currentDmPeer) return;
-  const msg = {
-    type:'dm', from:'dashboard', from_pubkey:'browser',
-    to_pubkey: state.currentDmPeer, text,
-    msg_id: crypto.randomUUID?.() || ''+Date.now(),
-    ts: nowTs(), encrypted: false,
+  
+  // Send command to agent to send the DM
+  const command = {
+    type: 'command',
+    command: 'send_dm',
+    params: {
+      to_pubkey: state.currentDmPeer,
+      text: text
+    },
+    from: 'dashboard',
+    to: state.pairedAgentPubkey,
+    ts: nowTs(),
+    msg_id: 'cmd-' + (crypto.randomUUID?.() || Date.now())
   };
-  const ok = await publishTopic(dmTopic(state.currentDmPeer), msg);
-  if (ok) routeMessage(msg);
+  
+  const ok = await publishTopic(`/claku/1/command/${state.pairedAgentPubkey}/proto`, command);
+  if (ok) {
+    addActivity('system', { text: `Sent DM to ${truncate(state.currentDmPeer, 16)}` });
+  } else {
+    addActivity('error', { text: 'Failed to send DM' });
+  }
   dom.dmMsgInput.value = '';
 }
 
@@ -856,7 +904,7 @@ function hideAgentManagement() {
 }
 
 // ─── Init ───
-function init() {
+async function init() {
   // Initialize DOM elements (must be done after DOMContentLoaded)
   dom = {
     pairingSection: $('#pairing-section'),
@@ -1049,6 +1097,9 @@ function init() {
 
   renderActivity(); renderAgents(); renderChannelList(); renderDmList(); renderCircleList();
   
+  // Wait for libsodium to be ready
+  await window.sodium.ready;
+  
   // Connect to Waku network immediately on page load
   setTimeout(async () => {
     const ok = await connectWaku();
@@ -1061,4 +1112,4 @@ function init() {
   }, 500);
 }
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => init().catch(console.error));

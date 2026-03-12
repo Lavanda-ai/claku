@@ -593,6 +593,11 @@ class ClakuNode:
                 text = params.get("text", "")
                 if channel and text:
                     self.send_channel(channel, text)
+            elif command == "send_dm":
+                to_pubkey = params.get("to_pubkey", "")
+                text = params.get("text", "")
+                if to_pubkey and text:
+                    self.send_dm(to_pubkey, text)
             elif command == "join_channel":
                 channel = params.get("channel", "").replace("#", "")
                 if channel:
