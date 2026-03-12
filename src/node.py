@@ -639,6 +639,81 @@ class ClakuNode:
                 "error": str(e)
             })
 
+    def poll_pairing_requests(self) -> list[dict]:
+        """Poll for incoming pairing requests from dashboard.
+        
+        Auto-accepts pairing requests from the configured owner.
+        
+        Returns:
+            List of pairing request dicts that were processed.
+        """
+        topic = "/claku/1/pairing/proto"
+        messages = self.transport.poll_json(topic)
+        pairing_requests = [m for m in messages if m.get("type") == "pairing_request"]
+        
+        processed = []
+        for req in pairing_requests:
+            pairing_code = req.get("pairing_code")
+            owner_name = req.get("owner_name", "")
+            
+            if not pairing_code:
+                continue
+            
+            # Check if this request is from our configured owner
+            # For now, auto-accept all pairing requests
+            # TODO: Add owner verification logic
+            
+            self._log_dashboard("pairing_request_recv", {
+                "code": pairing_code,
+                "owner": owner_name,
+                "msg_id": req.get("msg_id", ""),
+            })
+            
+            # Auto-accept the pairing
+            self._accept_pairing_request(pairing_code, owner_name)
+            processed.append(req)
+        
+        return processed
+    
+    def _accept_pairing_request(self, code: str, owner_name: str) -> None:
+        """Accept a pairing request by publishing acceptance message.
+        
+        Args:
+            code: The 6-digit pairing code
+            owner_name: Name of the human requesting pairing
+        """
+        # Publish pairing acceptance
+        acceptance = {
+            "type": "pairing_accept",
+            "pairing_code": code,
+            "agent_name": self.identity["name"],
+            "agent_pubkey": self.identity["pubkey"],
+            "owner_name": owner_name,
+            "ts": int(time.time()),
+            "msg_id": str(uuid.uuid4()),
+        }
+        
+        # Sign the acceptance
+        sign_data = f"{code}:{self.identity['pubkey']}:{owner_name}".encode("utf-8")
+        ed_priv = hex_to_bytes(self.identity["secret"])
+        acceptance["signature"] = sign_message(sign_data, ed_priv)
+        
+        # Publish to pairing topic
+        topic = "/claku/1/pairing/proto"
+        ok = self.transport.publish_json(topic, acceptance)
+        
+        if ok:
+            self._log_dashboard("pairing_accepted", {
+                "code": code,
+                "owner": owner_name,
+            })
+            print(f"✅ Auto-accepted pairing code {code} from {owner_name}")
+        else:
+            self._log_dashboard("pairing_error", {
+                "code": code,
+                "error": "Failed to publish acceptance"
+            })
+
     # ── Circles ────────────────────────────────────────────────────────────
 
     def circle_create(self, name: str, description: str = "") -> dict:
@@ -1193,17 +1268,18 @@ class ClakuNode:
     def run_once(self) -> dict:
         """Execute a single poll cycle across all message types.
 
-        Checks discovery, DMs, tasks, commands, all joined channels, and all circles.
+        Checks discovery, DMs, tasks, commands, pairing requests, all joined channels, and all circles.
 
         Returns:
             Dict with keys ``discovered``, ``dms``, ``tasks``, ``commands``,
-            ``channels``, and ``circles``.
+            ``pairing_requests``, ``channels``, and ``circles``.
         """
         results: dict = {
             "discovered": self.discover(),
             "dms": self.poll_dms(),
             "tasks": self.poll_tasks(),
             "commands": self.poll_commands(),
+            "pairing_requests": self.poll_pairing_requests(),
             "channels": {},
             "circles": {},
         }

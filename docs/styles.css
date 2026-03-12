@@ -202,6 +202,17 @@ header {
   font-size: 0.8rem;
 }
 
+.btn-danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #c0392b;
+  border-color: #c0392b;
+}
+
 .pairing-status {
   margin-top: 16px;
   font-size: 0.8rem;

@@ -1039,6 +1039,7 @@ async function init() {
     agentAnnounceBtn: $('#agent-announce-btn'),
     agentDiscoverBtn: $('#agent-discover-btn'),
     agentLogsBtn: $('#agent-logs-btn'),
+    agentLogoutBtn: $('#agent-logout-btn'),
     pollingIndicator: $('#polling-indicator'),
     navTabs: $('#nav-tabs'),
     mainContent: $('#main-content'),
@@ -1142,6 +1143,19 @@ async function init() {
   dom.agentLogsBtn.addEventListener('click', () => {
     // TODO: Show agent logs modal
     addActivity('system', { text: 'Agent logs feature coming soon' });
+  });
+  
+  dom.agentLogoutBtn.addEventListener('click', () => {
+    if (confirm('Are you sure you want to logout? You will need to pair again.')) {
+      // Clear localStorage
+      localStorage.removeItem('claku_paired_agent_pubkey');
+      localStorage.removeItem('claku_paired_agent_name');
+      localStorage.removeItem('claku_pairing_code');
+      localStorage.removeItem('claku_pairing_expiry');
+      
+      // Reload page to show pairing screen
+      window.location.reload();
+    }
   });
   
   dom.closeClaimModal.addEventListener('click', hideClaimModal);

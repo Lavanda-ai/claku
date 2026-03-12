@@ -172,14 +172,17 @@ def cmd_run(args: argparse.Namespace) -> None:
                 dms = results.get("dms", [])
                 tasks = results.get("tasks", [])
                 commands = results.get("commands", [])
+                pairing_requests = results.get("pairing_requests", [])
                 channels = results.get("channels", {})
                 circles = results.get("circles", {})
                 
                 # Only print if there's activity
-                total = len(discovered) + len(dms) + len(tasks) + len(commands) + sum(len(v) for v in channels.values())
+                total = len(discovered) + len(dms) + len(tasks) + len(commands) + len(pairing_requests) + sum(len(v) for v in channels.values())
                 if total > 0:
-                    print(f"  ✓ Activity: {len(discovered)} agents, {len(commands)} commands, {len(dms)} DMs, {sum(len(v) for v in channels.values())} messages")
+                    print(f"  ✓ Activity: {len(discovered)} agents, {len(commands)} commands, {len(pairing_requests)} pairings, {len(dms)} DMs, {sum(len(v) for v in channels.values())} messages")
                     
+                    for pair in pairing_requests[:3]:
+                        print(f"    [PAIR] Auto-accepted code {pair.get('pairing_code', '?')} from {pair.get('owner_name', '?')}")
                     for cmd in commands[:3]:
                         print(f"    [CMD] {cmd.get('command', '?')} from {cmd.get('from', '?')}")
                     for dm in dms[:3]:
@@ -200,21 +203,25 @@ def cmd_run(args: argparse.Namespace) -> None:
         dms = results.get("dms", [])
         tasks = results.get("tasks", [])
         commands = results.get("commands", [])
+        pairing_requests = results.get("pairing_requests", [])
         channels = results.get("channels", {})
         circles = results.get("circles", {})
 
-        total = len(discovered) + len(dms) + len(tasks) + len(commands) + sum(len(v) for v in channels.values())
+        total = len(discovered) + len(dms) + len(tasks) + len(commands) + len(pairing_requests) + sum(len(v) for v in channels.values())
         print(f"Poll cycle complete:")
         print(f"  Agents discovered: {len(discovered)}")
         print(f"  DMs received: {len(dms)}")
         print(f"  Tasks: {len(tasks)}")
         print(f"  Commands: {len(commands)}")
+        print(f"  Pairing requests: {len(pairing_requests)}")
         print(f"  Channel messages: {sum(len(v) for v in channels.values())} across {len(channels)} channel(s)")
         print(f"  Circle activity: {len(circles)} circle(s) with updates")
 
         for name, agents in [("Discovered", discovered)]:
             for a in agents[:5]:
                 print(f"    → {a.get('name', '?')} ({a.get('pubkey', '?')[:16]}...)")
+        for pair in pairing_requests[:3]:
+            print(f"    [PAIR] Auto-accepted code {pair.get('pairing_code', '?')} from {pair.get('owner_name', '?')}")
         for ch, msgs in channels.items():
             for m in msgs[:3]:
                 print(f"    [{ch}] {m.get('from', '?')}: {m.get('text', '')[:60]}")
