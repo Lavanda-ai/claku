@@ -1201,8 +1201,10 @@ async function init() {
 
   renderActivity(); renderAgents(); renderChannelList(); renderDmList(); renderCircleList();
   
-  // Wait for libsodium to be ready
-  await window.sodium.ready;
+  // Wait for libsodium to be ready (optional, for DM encryption)
+  if (window.sodium) {
+    await window.sodium.ready;
+  }
   
   // Restore paired agent from localStorage
   const savedPubkey = localStorage.getItem('claku_paired_agent_pubkey');
