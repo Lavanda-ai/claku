@@ -330,7 +330,8 @@ function renderProposals() {
   }
   dom.proposalList.innerHTML = circle.proposals.map(p => {
     const deadlineStr = p.deadline ? fmtTime(p.deadline) : '—';
-    return `<div class="proposal-card">
+    const proposalId = p.proposal_id || p.id;
+    return `<div class="proposal-card" data-proposal-id="${esc(proposalId)}">
       <div class="proposal-card-header">
         <span class="proposal-title">${esc(p.title)}</span>
         <span class="proposal-status ${esc(p.status)}">${esc(p.status)}</span>
@@ -343,8 +344,49 @@ function renderProposals() {
         </div>
         <span>deadline: ${deadlineStr}</span>
       </div>
+      ${p.status === 'open' ? `
+        <div class="proposal-actions">
+          <button class="btn-sm vote-yes" data-vote="yes">Yes</button>
+          <button class="btn-sm vote-no" data-vote="no">No</button>
+          <button class="btn-sm vote-abstain" data-vote="abstain">Abstain</button>
+        </div>
+      ` : ''}
     </div>`;
   }).join('');
+  
+  // Add vote button handlers
+  dom.proposalList.querySelectorAll('.proposal-actions button').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const card = btn.closest('.proposal-card');
+      const proposalId = card.dataset.proposalId;
+      const vote = btn.dataset.vote;
+      await submitVote(proposalId, vote);
+    });
+  });
+}
+
+async function submitVote(proposalId, vote) {
+  if (!state.currentCircle || !proposalId) return;
+  
+  // Send command to agent to vote
+  const command = {
+    type: 'command',
+    command: 'circle_vote',
+    params: {
+      circle: state.currentCircle,
+      proposal_id: proposalId,
+      vote: vote
+    },
+    from: 'dashboard',
+    to: state.pairedAgentPubkey,
+    ts: nowTs(),
+    msg_id: 'cmd-' + (crypto.randomUUID?.() || Date.now())
+  };
+  
+  const ok = await publishTopic(`/claku/1/command/${state.pairedAgentPubkey}/proto`, command);
+  if (ok) {
+    addActivity('system', { text: `Voted ${vote} on proposal in ⊙${state.currentCircle}` });
+  }
 }
 
 async function subscribeCircle(name) {
@@ -367,12 +409,30 @@ async function submitCreateCircle() {
   const name = dom.circleNameInput.value.trim().toLowerCase().replace(/\s+/g, '-');
   const desc = dom.circleDescInput.value.trim();
   if (!name) return;
-  const circle = { name, description: desc, members: 1, proposals: [], ts: nowTs() };
-  state.circles.set(name, circle);
-  await publishTopic(circleMsgTopic(name), { type: 'circle_create', ...circle });
-  addActivity('system', { text: `circle "${name}" created` });
+  
+  // Send command to agent to create circle
+  const command = {
+    type: 'command',
+    command: 'circle_create',
+    params: {
+      name: name,
+      description: desc
+    },
+    from: 'dashboard',
+    to: state.pairedAgentPubkey,
+    ts: nowTs(),
+    msg_id: 'cmd-' + (crypto.randomUUID?.() || Date.now())
+  };
+  
+  const ok = await publishTopic(`/claku/1/command/${state.pairedAgentPubkey}/proto`, command);
+  if (ok) {
+    addActivity('system', { text: `Requested agent to create circle "${name}"` });
+    // Optimistically add to local state
+    const circle = { name, description: desc, members: [], proposals: [], ts: nowTs() };
+    state.circles.set(name, circle);
+    renderCircleList();
+  }
   hideCreateCircleForm();
-  renderCircleList();
 }
 
 function showCreateProposalForm() {
@@ -392,20 +452,28 @@ async function submitCreateProposal() {
   const desc = dom.proposalDescInput.value.trim();
   const hours = parseInt(dom.proposalDeadlineInput.value) || 24;
   if (!title || !state.currentCircle) return;
-  const circle = state.circles.get(state.currentCircle);
-  if (!circle) return;
-  const proposal = {
-    id: crypto.randomUUID?.() || '' + Date.now(),
-    title, description: desc, status: 'active',
-    votesFor: 0, votesAgainst: 0,
-    deadline: nowTs() + (hours * 3600), ts: nowTs(),
+  
+  // Send command to agent to create proposal
+  const command = {
+    type: 'command',
+    command: 'circle_propose',
+    params: {
+      circle: state.currentCircle,
+      title: title,
+      description: desc,
+      deadline_hours: hours
+    },
+    from: 'dashboard',
+    to: state.pairedAgentPubkey,
+    ts: nowTs(),
+    msg_id: 'cmd-' + (crypto.randomUUID?.() || Date.now())
   };
-  if (!circle.proposals) circle.proposals = [];
-  circle.proposals.unshift(proposal);
-  await publishTopic(circleProposalTopic(state.currentCircle), { type: 'proposal', circle: state.currentCircle, ...proposal });
-  addActivity('system', { text: `proposal "${title}" created in ⊙${state.currentCircle}` });
+  
+  const ok = await publishTopic(`/claku/1/command/${state.pairedAgentPubkey}/proto`, command);
+  if (ok) {
+    addActivity('system', { text: `Requested agent to create proposal "${title}" in ⊙${state.currentCircle}` });
+  }
   hideCreateProposalForm();
-  renderProposals();
 }
 
 // ─── Message Router ───
@@ -443,6 +511,34 @@ function routeMessage(data) {
       case 'task_request':
       case 'task_response':
         addActivity(msg.type, msg);
+        break;
+      case 'circle_create':
+      case 'circle_join':
+        const circleName = msg.circle || msg.name;
+        if (circleName) {
+          if (!state.circles.has(circleName)) {
+            state.circles.set(circleName, { name: circleName, members: [], proposals: [] });
+          }
+          addActivity('circle', { text: `Circle ${circleName} activity` });
+          renderCircleList();
+        }
+        break;
+      case 'proposal':
+        const propCircle = msg.circle;
+        if (propCircle && state.circles.has(propCircle)) {
+          const circle = state.circles.get(propCircle);
+          if (!circle.proposals) circle.proposals = [];
+          circle.proposals.push(msg);
+          addActivity('proposal', { text: `New proposal in ⊙${propCircle}` });
+          if (state.currentCircle === propCircle) renderProposals();
+        }
+        break;
+      case 'vote':
+        const voteCircle = msg.circle;
+        if (voteCircle && state.circles.has(voteCircle)) {
+          addActivity('vote', { text: `Vote in ⊙${voteCircle}` });
+          if (state.currentCircle === voteCircle) renderProposals();
+        }
         break;
       case 'pairing_accept':
         // Agent has accepted our pairing request
@@ -585,7 +681,7 @@ async function pollTopics() {
 }
 
 async function pollStoreMessages() {
-  // Poll discovery, channels, and circles from Store
+  // Poll discovery, channels, circles, and DMs from Store
   const topics = [
     '/claku/1/discovery/proto',
     '/claku/1/channel/general/proto',
@@ -594,6 +690,11 @@ async function pollStoreMessages() {
   // Also poll DMs for paired agent
   if (state.pairedAgentPubkey) {
     topics.push(`/claku/1/dm/${state.pairedAgentPubkey}/proto`);
+  }
+  
+  // Poll known circles
+  for (const [circleName, circleData] of state.circles.entries()) {
+    topics.push(`/claku/1/circle/${circleName}/proto`);
   }
   
   for (const topic of topics) {

@@ -598,6 +598,28 @@ class ClakuNode:
                 text = params.get("text", "")
                 if to_pubkey and text:
                     self.send_dm(to_pubkey, text)
+            elif command == "circle_create":
+                name = params.get("name", "")
+                description = params.get("description", "")
+                if name:
+                    self.circle_create(name, description)
+            elif command == "circle_join":
+                name = params.get("name", "")
+                if name:
+                    self.circle_join(name)
+            elif command == "circle_propose":
+                circle = params.get("circle", "")
+                title = params.get("title", "")
+                description = params.get("description", "")
+                deadline_hours = params.get("deadline_hours", 24)
+                if circle and title:
+                    self.circle_propose(circle, title, description, deadline_hours)
+            elif command == "circle_vote":
+                circle = params.get("circle", "")
+                proposal_id = params.get("proposal_id", "")
+                vote = params.get("vote", "")
+                if circle and proposal_id and vote:
+                    self.circle_vote(circle, proposal_id, vote)
             elif command == "join_channel":
                 channel = params.get("channel", "").replace("#", "")
                 if channel:

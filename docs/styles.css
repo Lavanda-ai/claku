@@ -1154,3 +1154,44 @@ button:disabled {
   padding: 6px 12px;
   font-size: 0.8rem;
 }
+
+/* Proposal Actions */
+.proposal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.proposal-actions .btn-sm {
+  flex: 1;
+  padding: 8px 12px;
+}
+
+.vote-yes {
+  background: var(--success);
+  color: var(--bg);
+}
+
+.vote-yes:hover {
+  background: #999999;
+}
+
+.vote-no {
+  background: var(--danger);
+  color: var(--bg);
+}
+
+.vote-no:hover {
+  background: #dd5555;
+}
+
+.vote-abstain {
+  background: var(--bg-elevated);
+  color: var(--text-dim);
+}
+
+.vote-abstain:hover {
+  background: var(--bg-hover);
+}
