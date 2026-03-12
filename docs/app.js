@@ -660,6 +660,7 @@ async function pollTopics() {
   if (state.paired) {
     console.log('[POLL] Polling Store messages (paired mode)');
     await pollStoreMessages();
+    await pollCommandResults();
   }
   
   // Also poll Store for pairing responses (since Relay may not have peers)
@@ -758,6 +759,40 @@ async function pollPairingResponses() {
     }
   } catch (e) {
     console.warn('[PAIRING] Poll error:', e);
+  }
+}
+
+async function pollCommandResults() {
+  if (!state.pairedAgentPubkey) return;
+  
+  try {
+    const topic = `/claku/1/command-result/${state.pairedAgentPubkey}/proto`;
+    const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent(topic)}&pageSize=20&includeData=true&ascending=false`;
+    const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!resp.ok) return;
+    
+    const data = await resp.json();
+    for (const m of (data.messages || [])) {
+      const inner = m.message || m;
+      if (!inner.payload) continue;
+      try {
+        const msg = JSON.parse(atob(inner.payload));
+        const id = msg.msg_id || JSON.stringify(msg).slice(0, 64);
+        if (seenMsgIds.has(id)) continue;
+        seenMsgIds.add(id);
+        
+        // Check if this is a command result
+        if (msg.type === 'command_result') {
+          const status = msg.status === 'success' ? '✅' : '❌';
+          const text = `${status} ${msg.command}: ${msg.message}`;
+          addActivity('command_result', { text, status: msg.status });
+        }
+      } catch (e) {
+        console.warn('Error parsing command result:', e);
+      }
+    }
+  } catch (e) {
+    console.warn('command result poll error:', e);
   }
 }
 

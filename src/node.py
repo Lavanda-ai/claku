@@ -582,31 +582,47 @@ class ClakuNode:
         """
         command = cmd.get("command")
         params = cmd.get("params", {})
+        msg_id = cmd.get("msg_id", "")
         
         try:
+            result = None
             if command == "announce":
                 self.announce()
+                result = {"status": "success", "message": "Announced presence to network"}
             elif command == "discover":
-                self.discover()
+                agents = self.discover()
+                result = {"status": "success", "message": f"Discovered {len(agents)} agent(s)", "count": len(agents)}
             elif command == "send_channel":
                 channel = params.get("channel", "").replace("#", "")
                 text = params.get("text", "")
                 if channel and text:
                     self.send_channel(channel, text)
+                    result = {"status": "success", "message": f"Sent message to #{channel}"}
+                else:
+                    result = {"status": "error", "message": "Missing channel or text"}
             elif command == "send_dm":
                 to_pubkey = params.get("to_pubkey", "")
                 text = params.get("text", "")
                 if to_pubkey and text:
                     self.send_dm(to_pubkey, text)
+                    result = {"status": "success", "message": "Sent DM"}
+                else:
+                    result = {"status": "error", "message": "Missing recipient or text"}
             elif command == "circle_create":
                 name = params.get("name", "")
                 description = params.get("description", "")
                 if name:
                     self.circle_create(name, description)
+                    result = {"status": "success", "message": f"Created circle: {name}"}
+                else:
+                    result = {"status": "error", "message": "Missing circle name"}
             elif command == "circle_join":
                 name = params.get("name", "")
                 if name:
                     self.circle_join(name)
+                    result = {"status": "success", "message": f"Joined circle: {name}"}
+                else:
+                    result = {"status": "error", "message": "Missing circle name"}
             elif command == "circle_propose":
                 circle = params.get("circle", "")
                 title = params.get("title", "")
@@ -614,30 +630,78 @@ class ClakuNode:
                 deadline_hours = params.get("deadline_hours", 24)
                 if circle and title:
                     self.circle_propose(circle, title, description, deadline_hours)
+                    result = {"status": "success", "message": f"Created proposal in {circle}"}
+                else:
+                    result = {"status": "error", "message": "Missing circle or title"}
             elif command == "circle_vote":
                 circle = params.get("circle", "")
                 proposal_id = params.get("proposal_id", "")
                 vote = params.get("vote", "")
                 if circle and proposal_id and vote:
                     self.circle_vote(circle, proposal_id, vote)
+                    result = {"status": "success", "message": f"Voted {vote} on proposal"}
+                else:
+                    result = {"status": "error", "message": "Missing circle, proposal, or vote"}
             elif command == "join_channel":
                 channel = params.get("channel", "").replace("#", "")
                 if channel:
                     self.channels.add(channel)
+                    result = {"status": "success", "message": f"Joined channel #{channel}"}
+                else:
+                    result = {"status": "error", "message": "Missing channel name"}
             elif command == "leave_channel":
                 channel = params.get("channel", "").replace("#", "")
                 if channel and channel in self.channels:
                     self.channels.remove(channel)
+                    result = {"status": "success", "message": f"Left channel #{channel}"}
+                else:
+                    result = {"status": "error", "message": "Not in that channel"}
             else:
+                result = {"status": "error", "message": f"Unknown command: {command}"}
                 self._log_dashboard("command_error", {
-                    "msg_id": cmd.get("msg_id"),
+                    "msg_id": msg_id,
                     "error": f"Unknown command: {command}"
                 })
+            
+            # Publish result back to dashboard
+            if result:
+                self._publish_command_result(msg_id, command, result)
+                
         except Exception as e:
+            result = {"status": "error", "message": str(e)}
+            self._publish_command_result(msg_id, command, result)
             self._log_dashboard("command_error", {
-                "msg_id": cmd.get("msg_id"),
+                "msg_id": msg_id,
                 "error": str(e)
             })
+    
+    def _publish_command_result(self, msg_id: str, command: str, result: dict) -> None:
+        """Publish command execution result back to dashboard.
+        
+        Args:
+            msg_id: Original command message ID
+            command: Command name
+            result: Result dict with status and message
+        """
+        response = {
+            "type": "command_result",
+            "msg_id": msg_id,
+            "command": command,
+            "status": result.get("status"),
+            "message": result.get("message"),
+            "agent_pubkey": self.identity["pubkey"],
+            "agent_name": self.identity["name"],
+            "ts": int(time.time()),
+        }
+        
+        # Add any extra data from result
+        for key, value in result.items():
+            if key not in ["status", "message"]:
+                response[key] = value
+        
+        # Publish to command response topic
+        topic = f"/claku/1/command-result/{self.identity['pubkey']}/proto"
+        self.transport.publish_json(topic, response)
 
     def poll_pairing_requests(self) -> list[dict]:
         """Poll for incoming pairing requests from dashboard.
