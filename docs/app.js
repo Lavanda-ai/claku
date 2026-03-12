@@ -553,6 +553,14 @@ function handlePairingSuccess(agentMsg) {
   state.pairedAgentPubkey = agentMsg.agent_pubkey || agentMsg.pubkey;
   state.pairedAgentName = agentMsg.agent_name || agentMsg.name;
   
+  // Clear pairing code from localStorage
+  localStorage.removeItem('claku_pairing_code');
+  localStorage.removeItem('claku_pairing_expiry');
+  
+  // Save paired agent info to localStorage
+  localStorage.setItem('claku_paired_agent_pubkey', state.pairedAgentPubkey);
+  localStorage.setItem('claku_paired_agent_name', state.pairedAgentName);
+  
   dom.pairingSection.classList.add('hidden');
   dom.navTabs.classList.remove('hidden');
   dom.agentStatusPanel.classList.remove('hidden');
@@ -850,6 +858,10 @@ async function handleGeneratePair() {
   const code = generatePairingCode();
   state.currentPairingCode = code;
   state.pairingExpiry = nowTs() + 300; // 5 minutes
+  
+  // Persist to localStorage so it survives page refresh
+  localStorage.setItem('claku_pairing_code', code);
+  localStorage.setItem('claku_pairing_expiry', state.pairingExpiry);
   
   // Display code to user
   dom.pairingCodeDisplay.textContent = code;
@@ -1188,6 +1200,41 @@ async function init() {
   
   // Wait for libsodium to be ready
   await window.sodium.ready;
+  
+  // Restore paired agent from localStorage
+  const savedPubkey = localStorage.getItem('claku_paired_agent_pubkey');
+  const savedName = localStorage.getItem('claku_paired_agent_name');
+  if (savedPubkey && savedName) {
+    state.paired = true;
+    state.pairedAgentPubkey = savedPubkey;
+    state.pairedAgentName = savedName;
+    
+    // Show main UI
+    dom.pairingSection.classList.add('hidden');
+    dom.navTabs.classList.remove('hidden');
+    dom.agentStatusPanel.classList.remove('hidden');
+    dom.mainContent.classList.remove('hidden');
+    
+    // Update agent status panel
+    dom.pairedAgentName.textContent = state.pairedAgentName;
+    dom.pairedAgentPubkey.textContent = state.pairedAgentPubkey.slice(0, 12) + '...';
+    
+    if (!state.channels.has('general')) state.channels.set('general', []);
+    renderChannelList();
+  } else {
+    // Restore pairing code from localStorage if exists and not expired
+    const savedCode = localStorage.getItem('claku_pairing_code');
+    const savedExpiry = parseInt(localStorage.getItem('claku_pairing_expiry'));
+    if (savedCode && savedExpiry && nowTs() < savedExpiry) {
+      state.currentPairingCode = savedCode;
+      state.pairingExpiry = savedExpiry;
+      dom.pairingCodeDisplay.textContent = savedCode;
+      dom.pairingCodeSection.classList.remove('hidden');
+      dom.pairingStatus.innerHTML = `Waiting for agent to accept code <strong>${savedCode}</strong>...`;
+      dom.pairingStatus.className = 'pairing-status';
+      updateExpiryTimer();
+    }
+  }
   
   // Connect to Waku network immediately on page load
   setTimeout(async () => {
