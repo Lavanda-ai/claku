@@ -734,9 +734,12 @@ async function pollPairingResponses() {
         
         // Check if this is a pairing acceptance for our code
         if (msg.type === 'pairing_accept' && msg.pairing_code === state.currentPairingCode) {
+          console.log('Found pairing acceptance for code:', state.currentPairingCode);
           routeMessage(msg);
         }
-      } catch {}
+      } catch (e) {
+        console.warn('Error parsing pairing message:', e);
+      }
     }
   } catch (e) {
     console.warn('pairing poll error:', e);
@@ -1205,6 +1208,7 @@ async function init() {
   const savedPubkey = localStorage.getItem('claku_paired_agent_pubkey');
   const savedName = localStorage.getItem('claku_paired_agent_name');
   if (savedPubkey && savedName) {
+    console.log('Restoring paired agent from localStorage:', savedName);
     state.paired = true;
     state.pairedAgentPubkey = savedPubkey;
     state.pairedAgentName = savedName;
@@ -1225,7 +1229,9 @@ async function init() {
     // Restore pairing code from localStorage if exists and not expired
     const savedCode = localStorage.getItem('claku_pairing_code');
     const savedExpiry = parseInt(localStorage.getItem('claku_pairing_expiry'));
+    console.log('Checking for saved pairing code:', savedCode, 'expiry:', savedExpiry, 'now:', nowTs());
     if (savedCode && savedExpiry && nowTs() < savedExpiry) {
+      console.log('Restoring pairing code:', savedCode);
       state.currentPairingCode = savedCode;
       state.pairingExpiry = savedExpiry;
       dom.pairingCodeDisplay.textContent = savedCode;
@@ -1233,6 +1239,8 @@ async function init() {
       dom.pairingStatus.innerHTML = `Waiting for agent to accept code <strong>${savedCode}</strong>...`;
       dom.pairingStatus.className = 'pairing-status';
       updateExpiryTimer();
+    } else {
+      console.log('No valid pairing code found in localStorage');
     }
   }
   
