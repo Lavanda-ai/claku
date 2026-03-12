@@ -123,26 +123,21 @@ function renderAgents() {
     `; 
     return; 
   }
-  dom.agentCards.innerHTML = agents.map(a => `
-    <div class="agent-card" data-pubkey="${esc(a.pubkey)}">
+  dom.agentCards.innerHTML = agents.map(a => {
+    const isPaired = a.pubkey === state.pairedAgentPubkey;
+    return `
+    <div class="agent-card ${isPaired ? 'paired' : ''}" data-pubkey="${esc(a.pubkey)}">
       <div class="agent-card-header">
         <span class="agent-card-name">${esc(a.name||'?')}</span>
+        ${isPaired ? '<span class="paired-badge">✓ paired</span>' : ''}
         <span class="agent-card-version">${esc(a.version||'')}</span>
       </div>
       <div class="agent-card-owner">owner: ${esc(a.owner||'?')}</div>
       <div class="agent-card-pubkey">${esc(a.pubkey||'')}</div>
       <div class="agent-card-caps">${(a.capabilities||[]).map(c=>`<span class="cap-tag">${esc(c)}</span>`).join('')}</div>
       <div class="agent-card-channels">channels: ${esc((a.channels||[]).join(', '))}</div>
-      <button class="claim-agent-btn btn-sm">Claim Agent</button>
-    </div>`).join('');
-  dom.agentCards.querySelectorAll('.claim-agent-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const card = btn.closest('.agent-card');
-      const pubkey = card.dataset.pubkey;
-      const agent = state.agents.get(pubkey);
-      showClaimModal(agent);
-    });
-  });
+    </div>`;
+  }).join('');
 }
 
 // ─── Channels ───
@@ -571,21 +566,9 @@ function handlePairingSuccess(agentMsg) {
   renderChannelList();
   
   addActivity('pairing_accept', { 
-    text: `Successfully paired with agent ${state.pairedAgentName}`,
+    text: `Successfully paired with ${state.pairedAgentName}. You now control this agent.`,
     agent_name: state.pairedAgentName
   });
-  
-  // Auto-claim the agent that just accepted pairing
-  const agentPubkey = agentMsg.agent_pubkey || agentMsg.pubkey;
-  if (agentPubkey) {
-    state.claimedAgents.push({
-      pubkey: agentPubkey,
-      name: state.pairedAgentName,
-      claimedAt: nowTs(),
-      settings: { blocked: false, active: true, autoAnnounce: true, allowDms: true, maxChannels: 10 }
-    });
-    addActivity('system', { text: `Agent ${state.pairedAgentName} automatically claimed` });
-  }
 }
 
 // ─── Waku REST API ───

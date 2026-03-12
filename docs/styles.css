@@ -1245,3 +1245,20 @@ button:disabled {
 .polling-indicator.active {
   opacity: 1;
 }
+
+/* Paired Agent Badge */
+.agent-card.paired {
+  border: 2px solid var(--accent);
+  background: var(--bg-elevated);
+}
+
+.paired-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--accent);
+  color: var(--bg);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-left: 8px;
+}
