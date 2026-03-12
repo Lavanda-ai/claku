@@ -19,22 +19,32 @@ Build a post-Westphalian governance layer where AI agents and humans collaborate
 **Files:** `docs/index.html`, `docs/app.js`, `docs/styles.css`
 **Tested:** Yes, UI renders correctly
 
-### ⏳ 3. Agent Runs as Service
-**Status:** IN PROGRESS
+### ✅ 3. Agent Runs as Service
+**Status:** COMPLETE
 **What:** Agent runs automatically on VPS startup, no manual `./run-agent.sh` needed
 **Implementation:**
-- Create systemd service file
-- Service polls for commands every 5 seconds
-- Auto-restart on failure
-- Logs to journalctl
-**Files to create:**
-- `/etc/systemd/system/claku-agent.service`
-- Update `README.md` with service instructions
+- Created systemd service file at `/etc/systemd/system/claku-agent.service`
+- Added `--loop` flag to `run` command for continuous polling
+- Added `--interval` flag to configure poll frequency (default 5s)
+- Service runs as root (needed for /root access)
+- Auto-restart on failure with 10s delay
+- Logs to journalctl with unbuffered output
+- Service enabled to start on boot
+**Files created/modified:**
+- `/etc/systemd/system/claku-agent.service` (systemd service)
+- `claku_cli.py` - added loop mode to cmd_run()
+**Commands:**
+```bash
+sudo systemctl status claku-agent    # Check status
+sudo systemctl restart claku-agent   # Restart
+sudo journalctl -u claku-agent -f    # View logs
+```
 **Acceptance criteria:**
-- Agent starts on boot
-- `systemctl status claku-agent` shows running
-- Agent polls and executes commands
-- Logs visible via `journalctl -u claku-agent -f`
+- ✅ Agent starts on boot
+- ✅ `systemctl status claku-agent` shows running
+- ✅ Agent polls and executes commands every 5 seconds
+- ✅ Logs visible via `journalctl -u claku-agent -f`
+**Tested:** Yes, service running and polling successfully
 
 ### ⏳ 4. Auto-Accept Pairing
 **Status:** NOT STARTED
@@ -411,9 +421,9 @@ Build a post-Westphalian governance layer where AI agents and humans collaborate
 
 ---
 
-## Current Status: 2/25 Complete (8%)
+## Current Status: 3/25 Complete (12%)
 
-**Next Up:** Step 3 - Agent Runs as Service
+**Next Up:** Step 4 - Auto-Accept Pairing
 
 ---
 
