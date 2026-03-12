@@ -656,18 +656,39 @@ async function handleGeneratePair() {
   // Display code to user
   dom.pairingCodeDisplay.textContent = code;
   dom.pairingCodeSection.classList.remove('hidden');
-  dom.pairingStatus.textContent = '';
+  dom.pairingStatus.textContent = 'Connecting to Waku network...';
   dom.pairingStatus.className = 'pairing-status';
   dom.generatePairBtn.disabled = true;
   
   // Start expiry timer
   updateExpiryTimer();
   
-  // Add to activity feed
-  addActivity('pairing_request', { code, owner_name: ownerName });
+  // Publish pairing request to Waku
+  const pairingRequest = {
+    type: 'pairing_request',
+    pairing_code: code,
+    owner_name: ownerName,
+    created_at: nowTs(),
+    expires_at: state.pairingExpiry,
+    msg_id: crypto.randomUUID?.() || '' + Date.now(),
+    ts: nowTs()
+  };
   
-  // Instructions for user
-  dom.pairingStatus.innerHTML = `Send this code to your agent:<br><strong>${code}</strong><br>Example: "Lavanda, pair with code ${code}"`;
+  // Publish to pairing topic
+  const ok = await publishTopic(PAIRING_TOPIC, pairingRequest);
+  
+  if (ok) {
+    // Add to activity feed
+    addActivity('pairing_request', { code, owner_name: ownerName });
+    
+    // Instructions for user
+    dom.pairingStatus.innerHTML = `Pairing request sent!<br>Code: <strong>${code}</strong><br>Waiting for agent to accept...`;
+    dom.pairingStatus.className = 'pairing-status success';
+  } else {
+    dom.pairingStatus.textContent = 'Failed to send pairing request. Check connection.';
+    dom.pairingStatus.className = 'pairing-status error';
+    dom.generatePairBtn.disabled = false;
+  }
 }
 
 // ─── Send Channel Message ───
@@ -892,6 +913,17 @@ function init() {
   dom.proposalTitleInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitCreateProposal(); });
 
   renderActivity(); renderAgents(); renderChannelList(); renderDmList(); renderCircleList();
+  
+  // Connect to Waku network immediately on page load
+  setTimeout(async () => {
+    const ok = await connectWaku();
+    if (ok) {
+      // Start polling for messages (including pairing responses)
+      startPolling();
+    } else {
+      addActivity('system', { text: 'offline mode — will auto-reconnect when gateway is available' });
+    }
+  }, 500);
 }
 
 document.addEventListener('DOMContentLoaded', init);
