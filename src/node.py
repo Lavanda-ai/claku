@@ -125,7 +125,7 @@ class ClakuNode:
         )
         self.known_agents: dict[str, dict] = {}
         self.channels: set[str] = set(self.identity.get("channels", ["#general"]))
-        self.pairing = PairingManager()
+        self.pairing = PairingManager(self.identity, waku_url, auto_sharding=auto_sharding)
         self.connections = ConnectionManager()
         self._ensure_subscribed()
 
