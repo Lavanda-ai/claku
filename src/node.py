@@ -127,6 +127,7 @@ class ClakuNode:
         self.channels: set[str] = set(self.identity.get("channels", ["#general"]))
         self.pairing = PairingManager(self.identity, waku_url, auto_sharding=auto_sharding)
         self.connections = ConnectionManager()
+        self.workspace_mgr = None  # Lazy init
         self._ensure_subscribed()
 
     def _ensure_subscribed(self) -> None:
@@ -665,6 +666,29 @@ class ClakuNode:
                     result = {"status": "success", "message": f"Joined channel #{channel}"}
                 else:
                     result = {"status": "error", "message": "Missing channel name"}
+            elif command == "workspace_create":
+                name = params.get("name", "")
+                description = params.get("description", "")
+                if name:
+                    ws = self.workspace_create(name, description)
+                    result = {"status": "success", "message": f"Created workspace: {ws['id']}"}
+                else:
+                    result = {"status": "error", "message": "Missing workspace name"}
+            elif command == "workspace_join":
+                ws_id = params.get("workspace_id", "")
+                if ws_id:
+                    ok = self.workspace_join(ws_id)
+                    result = {"status": "success" if ok else "error", "message": f"Joined workspace: {ws_id}" if ok else "Workspace not found"}
+                else:
+                    result = {"status": "error", "message": "Missing workspace_id"}
+            elif command == "workspace_issue":
+                ws_id = params.get("workspace_id", "")
+                title = params.get("title", "")
+                if ws_id and title:
+                    issue = self.workspace_add_issue(ws_id, title, params.get("description", ""), params.get("assign"))
+                    result = {"status": "success", "message": f"Issue created: {issue['id']}"}
+                else:
+                    result = {"status": "error", "message": "Missing workspace_id or title"}
             elif command == "leave_channel":
                 channel = params.get("channel", "").replace("#", "")
                 if channel and channel in self.channels:
@@ -1375,6 +1399,7 @@ class ClakuNode:
             "pairing_requests": self.poll_pairing_requests(),
             "channels": {},
             "circles": {},
+            "workspaces": {},
         }
         for ch in self.channels:
             msgs = self.poll_channel(ch)
@@ -1388,6 +1413,12 @@ class ClakuNode:
             }
             if circle_results["proposals"] or circle_results["votes"]:
                 results["circles"][name] = circle_results
+        # Poll all workspaces
+        if self.workspace_mgr:
+            for ws_id in list(self.workspace_mgr.workspaces.keys()):
+                updates = self.workspace_poll(ws_id)
+                if updates:
+                    results["workspaces"][ws_id] = updates
         return results
 
 
@@ -1471,3 +1502,34 @@ class ClakuNode:
             return False
         
         return True
+
+    def _get_workspace_mgr(self):
+        """Lazy init workspace manager."""
+        if self.workspace_mgr is None:
+            from .workspace import WorkspaceManager
+            self.workspace_mgr = WorkspaceManager(self.identity, self.transport)
+        return self.workspace_mgr
+    
+    def workspace_create(self, name: str, description: str = "") -> dict:
+        """Create new workspace."""
+        return self._get_workspace_mgr().create_workspace(name, description)
+    
+    def workspace_join(self, ws_id: str) -> bool:
+        """Join workspace."""
+        return self._get_workspace_mgr().join_workspace(ws_id)
+    
+    def workspace_list(self) -> list[dict]:
+        """List workspaces."""
+        return self._get_workspace_mgr().list_workspaces()
+    
+    def workspace_add_issue(self, ws_id: str, title: str, description: str = "", assigned_to: str = None) -> dict:
+        """Add issue to workspace."""
+        return self._get_workspace_mgr().add_issue(ws_id, title, description, assigned_to)
+    
+    def workspace_add_decision(self, ws_id: str, title: str, description: str = "") -> dict:
+        """Log decision in workspace."""
+        return self._get_workspace_mgr().add_decision(ws_id, title, description)
+    
+    def workspace_poll(self, ws_id: str) -> list[dict]:
+        """Poll workspace for updates."""
+        return self._get_workspace_mgr().poll_workspace(ws_id)

@@ -217,7 +217,8 @@ def cmd_run(args: argparse.Namespace) -> None:
                 # Only print if there's activity
                 total = len(discovered) + len(dms) + len(tasks) + len(commands) + len(pairing_requests) + sum(len(v) for v in channels.values())
                 if total > 0:
-                    print(f"  ✓ Activity: {len(discovered)} agents, {len(commands)} commands, {len(pairing_requests)} pairings, {len(dms)} DMs, {sum(len(v) for v in channels.values())} messages")
+                    workspaces = results.get("workspaces", {})
+                    print(f"  ✓ Activity: {len(discovered)} agents, {len(commands)} commands, {len(pairing_requests)} pairings, {len(dms)} DMs, {sum(len(v) for v in channels.values())} messages, {len(workspaces)} workspaces")
                     
                     for pair in pairing_requests[:3]:
                         print(f"    [PAIR] Auto-accepted code {pair.get('pairing_code', '?')} from {pair.get('owner_name', '?')}")
@@ -254,6 +255,7 @@ def cmd_run(args: argparse.Namespace) -> None:
         print(f"  Pairing requests: {len(pairing_requests)}")
         print(f"  Channel messages: {sum(len(v) for v in channels.values())} across {len(channels)} channel(s)")
         print(f"  Circle activity: {len(circles)} circle(s) with updates")
+        print(f"  Workspace activity: {len(results.get('workspaces', {}))} workspace(s) with updates")
 
         for name, agents in [("Discovered", discovered)]:
             for a in agents[:5]:
@@ -936,28 +938,38 @@ def cmd_work_mode(args):
     print(f"✅ Work mode set to: {args.mode}")
 
 def cmd_workspace_create(args):
-    from src.workspace import create_workspace
-    ws = create_workspace(args.name, args.description or "", [_require_identity()["name"]])
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    ws = node.workspace_create(args.name, args.description or "")
     print(f"✅ Workspace created: {ws['id']}")
+    print(f"   Published to Waku for collaboration")
 
 def cmd_workspace_list(args):
-    from src.workspace import list_workspaces
-    wss = list_workspaces()
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    wss = node.workspace_list()
     if not wss:
         print("No workspaces")
         return
     for ws in wss:
-        print(f"{ws['id']}: {ws['name']} ({len(ws['members'])} members, {len(ws['issues'])} issues)")
+        print(f"{ws['id']}: {ws['name']}")
+        print(f"  Members: {len(ws['members'])}")
+        print(f"  Issues: {len(ws['issues'])} open")
+        print(f"  Decisions: {len(ws['decisions'])} logged")
 
 def cmd_workspace_issue(args):
-    from src.workspace import add_issue
-    issue = add_issue(args.workspace, args.title, args.description or "", args.assign)
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    issue = node.workspace_add_issue(args.workspace, args.title, args.description or "", args.assign)
     print(f"✅ Issue created: {issue['id']}")
+    print(f"   Published to workspace topic")
 
 def cmd_workspace_decision(args):
-    from src.workspace import add_decision
-    dec = add_decision(args.workspace, args.title, args.description or "")
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    dec = node.workspace_add_decision(args.workspace, args.title, args.description or "")
     print(f"✅ Decision logged: {dec['id']}")
+    print(f"   Published to workspace topic")
 
 def cmd_discover_filter(args):
     identity = _require_identity()
