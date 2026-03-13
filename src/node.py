@@ -590,6 +590,12 @@ class ClakuNode:
         Args:
             cmd: Command dict with 'command' and 'params' fields.
         """
+        # Check work mode
+        if not self.should_execute_command(cmd):
+            result = {"status": "error", "message": "Agent not in working hours or mode is manual"}
+            self._publish_command_result(cmd.get("msg_id", ""), cmd.get("command", ""), result)
+            return
+        
         command = cmd.get("command")
         params = cmd.get("params", {})
         msg_id = cmd.get("msg_id", "")
@@ -1419,3 +1425,49 @@ class ClakuNode:
             self.identity["reputation"][field] += amount
             from .identity import save_identity
             save_identity(self.identity)
+
+    def is_working_hours(self) -> bool:
+        """Check if agent is within working hours."""
+        mode = self.identity.get("work_mode", "autonomous")
+        if mode == "autonomous":
+            return True
+        
+        hours = self.identity.get("working_hours", "24/7")
+        if hours == "24/7":
+            return True
+        
+        # Parse hours format: "2h/day" or "09:00-11:00"
+        import datetime
+        now = datetime.datetime.now()
+        
+        if "h/day" in hours:
+            # TODO: Track daily usage
+            return True
+        elif "-" in hours:
+            # Time range format
+            try:
+                start, end = hours.split("-")
+                start_h, start_m = map(int, start.split(":"))
+                end_h, end_m = map(int, end.split(":"))
+                current = now.hour * 60 + now.minute
+                start_mins = start_h * 60 + start_m
+                end_mins = end_h * 60 + end_m
+                return start_mins <= current <= end_mins
+            except:
+                return True
+        
+        return True
+    
+    def should_execute_command(self, cmd: dict) -> bool:
+        """Check if command should be executed based on work mode."""
+        mode = self.identity.get("work_mode", "autonomous")
+        
+        if mode == "autonomous":
+            return True
+        elif mode == "supervised":
+            return self.is_working_hours()
+        elif mode == "manual":
+            # Manual mode requires explicit approval (not implemented yet)
+            return False
+        
+        return True
