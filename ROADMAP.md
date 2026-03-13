@@ -441,7 +441,7 @@ sudo journalctl -u claku-agent -f    # View logs
 
 ---
 
-## Current Status: 10/25 Complete (40%)
+## Current Status: 15/25 Complete (60%)
 
 **Next Up:** Step 6 - Agent Profiles with Capabilities
 
