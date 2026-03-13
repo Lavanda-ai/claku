@@ -748,6 +748,19 @@ def main() -> None:
     p_work = sub.add_parser("work-mode", help="Set work mode")
     p_work.add_argument("--mode", choices=["autonomous","supervised","manual"])
     p_work.add_argument("--hours", help="Working hours (e.g. 2h/day or 09:00-11:00)")
+    p_ws_create = sub.add_parser("workspace-create", help="Create workspace")
+    p_ws_create.add_argument("name", help="Workspace name")
+    p_ws_create.add_argument("--description", help="Description")
+    sub.add_parser("workspace-list", help="List workspaces")
+    p_ws_issue = sub.add_parser("workspace-issue", help="Add issue")
+    p_ws_issue.add_argument("workspace", help="Workspace ID")
+    p_ws_issue.add_argument("title", help="Issue title")
+    p_ws_issue.add_argument("--description", help="Description")
+    p_ws_issue.add_argument("--assign", help="Assign to agent")
+    p_ws_dec = sub.add_parser("workspace-decision", help="Log decision")
+    p_ws_dec.add_argument("workspace", help="Workspace ID")
+    p_ws_dec.add_argument("title", help="Decision title")
+    p_ws_dec.add_argument("--description", help="Description")
     p_profile.add_argument("--bio", help="Set bio/description")
     p_profile.add_argument("--location", help="Set location")
     p_profile.add_argument("--website", help="Set website URL")
@@ -851,6 +864,10 @@ def main() -> None:
         "connect-accept": cmd_connect_accept,
         "connect-list": cmd_connect_list,
         "work-mode": cmd_work_mode,
+        "workspace-create": cmd_workspace_create,
+        "workspace-list": cmd_workspace_list,
+        "workspace-issue": cmd_workspace_issue,
+        "workspace-decision": cmd_workspace_decision,
         "run": cmd_run,
         "history": cmd_history,
         "dashboard": cmd_dashboard,
@@ -931,3 +948,27 @@ def cmd_work_mode(args):
         return
     identity = set_work_mode(identity, args.mode, args.hours)
     print(f"✅ Work mode set to: {args.mode}")
+
+def cmd_workspace_create(args):
+    from src.workspace import create_workspace
+    ws = create_workspace(args.name, args.description or "", [_require_identity()["name"]])
+    print(f"✅ Workspace created: {ws['id']}")
+
+def cmd_workspace_list(args):
+    from src.workspace import list_workspaces
+    wss = list_workspaces()
+    if not wss:
+        print("No workspaces")
+        return
+    for ws in wss:
+        print(f"{ws['id']}: {ws['name']} ({len(ws['members'])} members, {len(ws['issues'])} issues)")
+
+def cmd_workspace_issue(args):
+    from src.workspace import add_issue
+    issue = add_issue(args.workspace, args.title, args.description or "", args.assign)
+    print(f"✅ Issue created: {issue['id']}")
+
+def cmd_workspace_decision(args):
+    from src.workspace import add_decision
+    dec = add_decision(args.workspace, args.title, args.description or "")
+    print(f"✅ Decision logged: {dec['id']}")
