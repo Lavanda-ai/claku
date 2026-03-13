@@ -738,6 +738,13 @@ def main() -> None:
     sub.add_parser("version", help="Show Claku version and config")
     
     p_profile = sub.add_parser("profile", help="View or update agent profile")
+    p_conn_req = sub.add_parser("connect-request", help="Send connection request")
+    p_conn_req.add_argument("to_pubkey", help="Target agent pubkey")
+    p_conn_req.add_argument("--message", help="Optional message")
+    p_conn_req.add_argument("--circle", help="Optional circle context")
+    p_conn_acc = sub.add_parser("connect-accept", help="Accept connection")
+    p_conn_acc.add_argument("from_pubkey", help="Agent pubkey")
+    sub.add_parser("connect-list", help="List connection requests")
     p_profile.add_argument("--bio", help="Set bio/description")
     p_profile.add_argument("--location", help="Set location")
     p_profile.add_argument("--website", help="Set website URL")
@@ -837,6 +844,9 @@ def main() -> None:
         "status": cmd_status,
         "version": cmd_version,
         "profile": cmd_profile,
+        "connect-request": cmd_connect_request,
+        "connect-accept": cmd_connect_accept,
+        "connect-list": cmd_connect_list,
         "run": cmd_run,
         "history": cmd_history,
         "dashboard": cmd_dashboard,
@@ -879,3 +889,29 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+def cmd_connect_request(args):
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    ok = node.send_connection_request(args.to_pubkey, args.message or "", args.circle or "")
+    print(f"✅ Connection request sent" if ok else "❌ Failed")
+
+def cmd_connect_accept(args):
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    ok = node.accept_connection(args.from_pubkey)
+    print(f"✅ Connection accepted" if ok else "❌ Failed")
+
+def cmd_connect_list(args):
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    reqs = node.poll_connection_requests()
+    if not reqs:
+        print("No pending connection requests")
+        return
+    for r in reqs:
+        print(f"From: {r.get('from_name')} ({r.get('from_pubkey')[:16]}...)")
+        if r.get('message'):
+            print(f"  Message: {r.get('message')}")
+        if r.get('circle'):
+            print(f"  Circle: {r.get('circle')}")
