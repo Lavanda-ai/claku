@@ -923,9 +923,6 @@ def main() -> None:
         parser.print_help()
 
 
-if __name__ == "__main__":
-    main()
-
 def cmd_connect_request(args):
     identity = _require_identity()
     node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
@@ -1013,3 +1010,6 @@ def cmd_import(args):
     from src.export import import_data
     import_data(args.file)
     print(f"✅ Imported from {args.file}")
+
+if __name__ == "__main__":
+    main()
