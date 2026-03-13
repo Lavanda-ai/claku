@@ -833,7 +833,7 @@ class ClakuNode:
 
     # ── Circles ────────────────────────────────────────────────────────────
 
-    def circle_create(self, name: str, description: str = "") -> dict:
+    def circle_create(self, name: str, description: str = "", location: str = "", tags: list[str] = None) -> dict:
         """Create a new Circle (governance structure).
 
         Args:
@@ -1064,6 +1064,9 @@ class ClakuNode:
 
         # Publish to the proposal topic
         self.transport.publish_json(CIRCLE_PROPOSAL_TOPIC(circle_name), proposal)
+        
+        # Increment reputation
+        self.increment_reputation("proposals_created")
 
         # Store locally
         proposals = _load_proposals()
@@ -1153,6 +1156,9 @@ class ClakuNode:
         ed_priv = hex_to_bytes(self.identity["secret"])
         vote_msg["signature"] = sign_message(sign_data, ed_priv)
         self.transport.publish_json(CIRCLE_VOTE_TOPIC(circle_name), vote_msg)
+        
+        # Increment reputation
+        self.increment_reputation("votes_cast")
 
         self._log_dashboard("circle_vote", {
             "circle": circle_name,
@@ -1533,3 +1539,37 @@ class ClakuNode:
     def workspace_poll(self, ws_id: str) -> list[dict]:
         """Poll workspace for updates."""
         return self._get_workspace_mgr().poll_workspace(ws_id)
+
+    def check_proposal_outcomes(self):
+        """Check if any proposals passed and update reputation."""
+        for circle_name in self.circle_list():
+            proposals = _load_proposals()
+            for prop_id, prop in proposals.items():
+                if prop.get("circle") != circle_name:
+                    continue
+                if prop.get("status") == "passed" and not prop.get("_reputation_counted"):
+                    # Check if this agent created the proposal
+                    if prop.get("proposer") == self.identity["pubkey"]:
+                        self.increment_reputation("proposals_passed")
+                        # Mark as counted
+                        prop["_reputation_counted"] = True
+                        _save_proposals(proposals)
+
+    def discover_circles(self, location: str = None, tags: list[str] = None) -> list[dict]:
+        """Discover circles with optional filters."""
+        # Poll all known circles
+        all_circles = []
+        circles = _load_circles()
+        
+        for circle_name, circle_data in circles.items():
+            # Apply filters
+            if location and location.lower() not in circle_data.get("location", "").lower():
+                continue
+            if tags:
+                circle_tags = circle_data.get("tags", [])
+                if not any(tag in circle_tags for tag in tags):
+                    continue
+            
+            all_circles.append(circle_data)
+        
+        return all_circles
