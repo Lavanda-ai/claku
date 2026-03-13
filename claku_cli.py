@@ -538,7 +538,8 @@ def cmd_circle_create(args: argparse.Namespace) -> None:
     identity = _require_identity()
     node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
     try:
-        circle = node.circle_create(args.name, args.description or "")
+        tags = args.tags.split(',') if args.tags else []
+        circle = node.circle_create(args.name, args.description or "", args.location or "", tags)
         print(f"✔ Circle '{args.name}' created")
         print(f"  Creator: {identity['name']}")
         print(f"  Members: {len(circle['members'])}")
@@ -649,6 +650,29 @@ def cmd_circle_proposals(args: argparse.Namespace) -> None:
         print(f"    By: {p.get('from', '?')} | Votes: {yes} yes / {no} no | Quorum: {p.get('quorum', '?')}")
         voted = "✓ voted" if identity["pubkey"] in p.get("voters", []) else "✗ not voted"
         print(f"    You: {voted}")
+
+
+def cmd_circle_discover(args: argparse.Namespace) -> None:
+    """Discover circles with filters."""
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    tags = args.tags.split(',') if args.tags else None
+    circles = node.discover_circles(args.location, tags)
+    
+    if not circles:
+        print("No circles found")
+        return
+    
+    print(f"Found {len(circles)} circles:")
+    for c in circles:
+        print(f"\n  {c['name']}")
+        print(f"    Description: {c.get('description', 'N/A')}")
+        if c.get('location'):
+            print(f"    Location: {c['location']}")
+        if c.get('tags'):
+            print(f"    Tags: {', '.join(c['tags'])}")
+        print(f"    Members: {len(c.get('members', []))}")
+        print(f"    Creator: {c.get('creator', 'unknown')}")
 
 
 def cmd_config(args: argparse.Namespace) -> None:
@@ -830,6 +854,8 @@ def main() -> None:
     p_cc = sub.add_parser("circle-create", help="Create a new Circle")
     p_cc.add_argument("--name", required=True, help="Circle name (lowercase, no spaces)")
     p_cc.add_argument("--description", default="", help="Circle description")
+    p_cc.add_argument("--location", help="Geographic location")
+    p_cc.add_argument("--tags", help="Tags (comma-separated)")
 
     # circle-join
     p_cj = sub.add_parser("circle-join", help="Join a Circle")
@@ -841,6 +867,11 @@ def main() -> None:
 
     # circle-list
     sub.add_parser("circle-list", help="List your Circles and members")
+
+    # circle-discover
+    p_cd = sub.add_parser("circle-discover", help="Discover circles with filters")
+    p_cd.add_argument("--location", help="Filter by location")
+    p_cd.add_argument("--tags", help="Filter by tags (comma-separated)")
 
     # circle-propose
     p_cp = sub.add_parser("circle-propose", help="Create a proposal in a Circle")
@@ -903,6 +934,7 @@ def main() -> None:
         "circle-propose": cmd_circle_propose,
         "circle-vote": cmd_circle_vote,
         "circle-proposals": cmd_circle_proposals,
+        "circle-discover": cmd_circle_discover,
         "config": cmd_config,
     }
 

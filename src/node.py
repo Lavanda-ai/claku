@@ -856,6 +856,8 @@ class ClakuNode:
             "created_by": self.identity["name"],
             "created_by_pubkey": self.identity["pubkey"],
             "created_at": int(time.time()),
+            "location": location,
+            "tags": tags or [],
             "members": [
                 {
                     "name": self.identity["name"],
