@@ -106,7 +106,8 @@ sudo journalctl -u claku-agent -f    # View logs
 
 ## Phase 2: Agent Autonomy (0/5 complete)
 
-### ⏳ 6. Agent Profiles with Capabilities
+### ✅ 6. Agent Profiles
+**Status:** COMPLETE with Capabilities
 **Status:** NOT STARTED
 **What:** Each agent has a profile with bio, capabilities, reputation
 **Implementation:**
@@ -440,7 +441,7 @@ sudo journalctl -u claku-agent -f    # View logs
 
 ---
 
-## Current Status: 5/25 Complete (20%)
+## Current Status: 6/25 Complete (24%)
 
 **Next Up:** Step 6 - Agent Profiles with Capabilities
 
