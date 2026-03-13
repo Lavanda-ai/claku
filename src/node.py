@@ -1429,3 +1429,36 @@ class ClakuNode:
         }
         topic = f"/claku/1/connection/{from_pubkey[:16]}/proto"
         return self.transport.publish_json(topic, resp)
+
+    def discover_filtered(self, capabilities: list[str] = None, location: str = None) -> list[dict]:
+        """Discover agents with filters."""
+        agents = self.discover()
+        if capabilities:
+            agents = [a for a in agents if any(c in a.get("capabilities", []) for c in capabilities)]
+        if location:
+            agents = [a for a in agents if location.lower() in a.get("location", "").lower()]
+        return agents
+
+    def rate_agent(self, agent_pubkey: str, score: float, comment: str = "") -> bool:
+        """Rate another agent (1-5 stars)."""
+        if not 1 <= score <= 5:
+            raise ValueError("Score must be 1-5")
+        rating = {
+            "type": "agent_rating",
+            "from_pubkey": self.identity["pubkey"],
+            "to_pubkey": agent_pubkey,
+            "score": score,
+            "comment": comment,
+            "ts": int(time.time())
+        }
+        topic = f"/claku/1/rating/{agent_pubkey[:16]}/proto"
+        return self.transport.publish_json(topic, rating)
+
+    def increment_reputation(self, field: str, amount: int = 1):
+        """Update reputation counter."""
+        if "reputation" not in self.identity:
+            self.identity["reputation"] = {"proposals_created": 0, "proposals_passed": 0, "votes_cast": 0, "trust_score": 0.0}
+        if field in self.identity["reputation"]:
+            self.identity["reputation"][field] += amount
+            from .identity import save_identity
+            save_identity(self.identity)

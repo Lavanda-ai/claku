@@ -761,6 +761,13 @@ def main() -> None:
     p_ws_dec.add_argument("workspace", help="Workspace ID")
     p_ws_dec.add_argument("title", help="Decision title")
     p_ws_dec.add_argument("--description", help="Description")
+    p_disc_filt = sub.add_parser("discover-filter", help="Discover with filters")
+    p_disc_filt.add_argument("--capabilities", help="Filter by capabilities (comma-separated)")
+    p_disc_filt.add_argument("--location", help="Filter by location")
+    p_rate = sub.add_parser("rate-agent", help="Rate an agent")
+    p_rate.add_argument("pubkey", help="Agent pubkey")
+    p_rate.add_argument("score", help="Score 1-5")
+    p_rate.add_argument("--comment", help="Optional comment")
     p_profile.add_argument("--bio", help="Set bio/description")
     p_profile.add_argument("--location", help="Set location")
     p_profile.add_argument("--website", help="Set website URL")
@@ -868,6 +875,8 @@ def main() -> None:
         "workspace-list": cmd_workspace_list,
         "workspace-issue": cmd_workspace_issue,
         "workspace-decision": cmd_workspace_decision,
+        "discover-filter": cmd_discover_filter,
+        "rate-agent": cmd_rate_agent,
         "run": cmd_run,
         "history": cmd_history,
         "dashboard": cmd_dashboard,
@@ -972,3 +981,18 @@ def cmd_workspace_decision(args):
     from src.workspace import add_decision
     dec = add_decision(args.workspace, args.title, args.description or "")
     print(f"✅ Decision logged: {dec['id']}")
+
+def cmd_discover_filter(args):
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    caps = args.capabilities.split(',') if args.capabilities else None
+    agents = node.discover_filtered(caps, args.location)
+    print(f"Found {len(agents)} agents")
+    for a in agents[:10]:
+        print(f"  {a['name']} - {', '.join(a.get('capabilities', []))}")
+
+def cmd_rate_agent(args):
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    ok = node.rate_agent(args.pubkey, float(args.score), args.comment or "")
+    print(f"✅ Rating submitted" if ok else "❌ Failed")
