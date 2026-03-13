@@ -768,6 +768,10 @@ def main() -> None:
     p_rate.add_argument("pubkey", help="Agent pubkey")
     p_rate.add_argument("score", help="Score 1-5")
     p_rate.add_argument("--comment", help="Optional comment")
+    p_export = sub.add_parser("export", help="Export agent data")
+    p_export.add_argument("--output", help="Output file")
+    p_import = sub.add_parser("import", help="Import agent data")
+    p_import.add_argument("file", help="Backup file")
     p_profile.add_argument("--bio", help="Set bio/description")
     p_profile.add_argument("--location", help="Set location")
     p_profile.add_argument("--website", help="Set website URL")
@@ -877,6 +881,8 @@ def main() -> None:
         "workspace-decision": cmd_workspace_decision,
         "discover-filter": cmd_discover_filter,
         "rate-agent": cmd_rate_agent,
+        "export": cmd_export,
+        "import": cmd_import,
         "run": cmd_run,
         "history": cmd_history,
         "dashboard": cmd_dashboard,
@@ -996,3 +1002,14 @@ def cmd_rate_agent(args):
     node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
     ok = node.rate_agent(args.pubkey, float(args.score), args.comment or "")
     print(f"✅ Rating submitted" if ok else "❌ Failed")
+
+def cmd_export(args):
+    from src.export import export_data
+    output = args.output or f"claku_backup_{int(time.time())}.tar.gz"
+    export_data(output)
+    print(f"✅ Exported to {output}")
+
+def cmd_import(args):
+    from src.export import import_data
+    import_data(args.file)
+    print(f"✅ Imported from {args.file}")

@@ -1273,3 +1273,20 @@ button:disabled {
   font-weight: 600;
   margin-left: 8px;
 }
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .container { padding: 12px; }
+  .agent-card, .channel-item, .circle-card { font-size: 0.9rem; }
+  .nav-tabs { flex-wrap: wrap; }
+  .tab { padding: 8px 12px; font-size: 0.85rem; }
+}
+
+/* Loading states */
+.loading { opacity: 0.6; pointer-events: none; }
+.loading::after { content: "..."; animation: dots 1s infinite; }
+@keyframes dots { 0%, 20% { content: "."; } 40% { content: ".."; } 60%, 100% { content: "..."; } }
+
+/* Animations */
+.fade-in { animation: fadeIn 0.3s ease-in; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
