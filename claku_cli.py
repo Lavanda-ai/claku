@@ -923,32 +923,6 @@ def main() -> None:
         parser.print_help()
 
 
-def cmd_connect_request(args):
-    identity = _require_identity()
-    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
-    ok = node.send_connection_request(args.to_pubkey, args.message or "", args.circle or "")
-    print(f"✅ Connection request sent" if ok else "❌ Failed")
-
-def cmd_connect_accept(args):
-    identity = _require_identity()
-    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
-    ok = node.accept_connection(args.from_pubkey)
-    print(f"✅ Connection accepted" if ok else "❌ Failed")
-
-def cmd_connect_list(args):
-    identity = _require_identity()
-    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
-    reqs = node.poll_connection_requests()
-    if not reqs:
-        print("No pending connection requests")
-        return
-    for r in reqs:
-        print(f"From: {r.get('from_name')} ({r.get('from_pubkey')[:16]}...)")
-        if r.get('message'):
-            print(f"  Message: {r.get('message')}")
-        if r.get('circle'):
-            print(f"  Circle: {r.get('circle')}")
-
 def cmd_work_mode(args):
     from src.identity import load_identity, set_work_mode
     identity = _require_identity()
@@ -1010,6 +984,32 @@ def cmd_import(args):
     from src.export import import_data
     import_data(args.file)
     print(f"✅ Imported from {args.file}")
+
+
+def cmd_connect_request(args):
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    ok = node.send_connection_request(args.to_pubkey, args.message or "")
+    print(f"✅ Connection request sent" if ok else "❌ Failed")
+
+def cmd_connect_accept(args):
+    identity = _require_identity()
+    from src.connections import ConnectionManager
+    conn_mgr = ConnectionManager()
+    # Get agent name from known agents
+    result = conn_mgr.accept_connection(args.from_pubkey, args.from_pubkey[:16])
+    print(f"✅ Connection accepted")
+
+def cmd_connect_list(args):
+    from src.connections import ConnectionManager
+    conn_mgr = ConnectionManager()
+    connections = conn_mgr.list_connections()
+    if not connections:
+        print("No connections")
+        return
+    for c in connections:
+        trust_level = ["SEEN", "CONTACTED", "TRUSTED", "CIRCLE"][c.get("trust", 0)]
+        print(f"{c.get('name', '?')} ({c.get('pubkey', '')[:16]}...) - {trust_level}")
 
 if __name__ == "__main__":
     main()

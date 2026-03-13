@@ -545,6 +545,14 @@ function routeMessage(data) {
           if (state.currentCircle === voteCircle) renderProposals();
         }
         break;
+      case 'connection_request':
+        addActivity('connection_request', { 
+          text: `Connection request from ${msg.from_name || 'unknown'}`,
+          from: msg.from_name,
+          from_pubkey: msg.from_pubkey,
+          message: msg.reason || msg.message
+        });
+        break;
       case 'pairing_accept':
         // Agent has accepted our pairing request
         if (msg.pairing_code === state.currentPairingCode) {

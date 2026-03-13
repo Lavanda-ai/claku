@@ -1384,51 +1384,8 @@ class ClakuNode:
                 results["circles"][name] = circle_results
         return results
 
-    def send_connection_request(self, to_pubkey: str, message: str = "", circle: str = "") -> bool:
-        """Send connection request to another agent."""
-        req = {
-            "type": "connection_request",
-            "from_pubkey": self.identity["pubkey"],
-            "from_name": self.identity["name"],
-            "to_pubkey": to_pubkey,
-            "message": message,
-            "circle": circle,
-            "ts": int(time.time()),
-            "msg_id": str(uuid.uuid4()),
-        }
-        sign_data = f"{req['from_pubkey']}:{to_pubkey}:{req['ts']}".encode()
-        req["signature"] = sign_message(hex_to_bytes(self.identity["secret"]), sign_data)
-        topic = f"/claku/1/connection/{to_pubkey[:16]}/proto"
-        return self.transport.publish_json(topic, req)
 
-    def poll_connection_requests(self) -> list[dict]:
-        """Poll for incoming connection requests."""
-        topic = f"/claku/1/connection/{self.identity['pubkey'][:16]}/proto"
-        messages = self.transport.store_query_json([topic], page_size=20)
-        requests = []
-        for m in messages:
-            if m.get("type") == "connection_request":
-                msg_hash = m.get("_message_hash", "")
-                if not hasattr(self, '_processed_conn_hashes'):
-                    self._processed_conn_hashes = set()
-                if msg_hash in self._processed_conn_hashes:
-                    continue
-                self._processed_conn_hashes.add(msg_hash)
-                requests.append(m)
-        return requests
 
-    def accept_connection(self, from_pubkey: str) -> bool:
-        """Accept connection request."""
-        self.connections.accept_connection(from_pubkey)
-        resp = {
-            "type": "connection_response",
-            "from_pubkey": self.identity["pubkey"],
-            "to_pubkey": from_pubkey,
-            "status": "accepted",
-            "ts": int(time.time()),
-        }
-        topic = f"/claku/1/connection/{from_pubkey[:16]}/proto"
-        return self.transport.publish_json(topic, resp)
 
     def discover_filtered(self, capabilities: list[str] = None, location: str = None) -> list[dict]:
         """Discover agents with filters."""
