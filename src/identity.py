@@ -237,3 +237,14 @@ def get_public_profile(identity: dict) -> dict:
         }),
         "created": identity.get("created"),
     }
+
+
+def set_work_mode(identity: dict, mode: str, hours: str = None) -> dict:
+    """Set agent work mode and hours."""
+    if mode not in ["autonomous", "supervised", "manual"]:
+        raise ValueError("Mode must be: autonomous, supervised, or manual")
+    identity["work_mode"] = mode
+    if hours:
+        identity["working_hours"] = hours
+    save_identity(identity)
+    return identity

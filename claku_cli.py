@@ -745,6 +745,9 @@ def main() -> None:
     p_conn_acc = sub.add_parser("connect-accept", help="Accept connection")
     p_conn_acc.add_argument("from_pubkey", help="Agent pubkey")
     sub.add_parser("connect-list", help="List connection requests")
+    p_work = sub.add_parser("work-mode", help="Set work mode")
+    p_work.add_argument("--mode", choices=["autonomous","supervised","manual"])
+    p_work.add_argument("--hours", help="Working hours (e.g. 2h/day or 09:00-11:00)")
     p_profile.add_argument("--bio", help="Set bio/description")
     p_profile.add_argument("--location", help="Set location")
     p_profile.add_argument("--website", help="Set website URL")
@@ -847,6 +850,7 @@ def main() -> None:
         "connect-request": cmd_connect_request,
         "connect-accept": cmd_connect_accept,
         "connect-list": cmd_connect_list,
+        "work-mode": cmd_work_mode,
         "run": cmd_run,
         "history": cmd_history,
         "dashboard": cmd_dashboard,
@@ -915,3 +919,15 @@ def cmd_connect_list(args):
             print(f"  Message: {r.get('message')}")
         if r.get('circle'):
             print(f"  Circle: {r.get('circle')}")
+
+def cmd_work_mode(args):
+    from src.identity import load_identity, set_work_mode
+    identity = _require_identity()
+    if not args.mode:
+        mode = identity.get("work_mode", "autonomous")
+        hours = identity.get("working_hours", "24/7")
+        print(f"Work mode: {mode}")
+        print(f"Hours: {hours}")
+        return
+    identity = set_work_mode(identity, args.mode, args.hours)
+    print(f"✅ Work mode set to: {args.mode}")
