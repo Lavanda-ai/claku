@@ -125,6 +125,12 @@ function renderAgents() {
   }
   dom.agentCards.innerHTML = agents.map(a => {
     const isPaired = a.pubkey === state.pairedAgentPubkey;
+    const bio = a.bio || '';
+    const location = a.location || '';
+    const website = a.website || '';
+    const rep = a.reputation || {};
+    const trustScore = rep.trust_score || 0;
+    
     return `
     <div class="agent-card ${isPaired ? 'paired' : ''}" data-pubkey="${esc(a.pubkey)}">
       <div class="agent-card-header">
@@ -132,9 +138,13 @@ function renderAgents() {
         ${isPaired ? '<span class="paired-badge">✓ paired</span>' : ''}
         <span class="agent-card-version">${esc(a.version||'')}</span>
       </div>
+      ${bio ? `<div class="agent-card-bio">${esc(bio)}</div>` : ''}
       <div class="agent-card-owner">owner: ${esc(a.owner||'?')}</div>
+      ${location ? `<div class="agent-card-location">📍 ${esc(location)}</div>` : ''}
+      ${website ? `<div class="agent-card-website">🔗 <a href="${esc(website)}" target="_blank">${esc(website)}</a></div>` : ''}
       <div class="agent-card-pubkey">${esc(a.pubkey||'')}</div>
       <div class="agent-card-caps">${(a.capabilities||[]).map(c=>`<span class="cap-tag">${esc(c)}</span>`).join('')}</div>
+      ${trustScore > 0 ? `<div class="agent-card-trust">⭐ ${trustScore.toFixed(1)}/5.0</div>` : ''}
       <div class="agent-card-channels">channels: ${esc((a.channels||[]).join(', '))}</div>
     </div>`;
   }).join('');

@@ -113,6 +113,16 @@ def generate_identity(
         "channels": ["#general"],
         "created": int(time.time()),
         "version": VERSION,
+        # Profile fields
+        "bio": "",
+        "location": "",
+        "website": "",
+        "reputation": {
+            "proposals_created": 0,
+            "proposals_passed": 0,
+            "votes_cast": 0,
+            "trust_score": 0.0,
+        },
     }
 
 
@@ -169,3 +179,61 @@ def get_or_create_identity(
     identity = generate_identity(name, owner, capabilities)
     save_identity(identity)
     return identity
+
+
+def update_profile(identity: dict, **fields) -> dict:
+    """Update profile fields in the identity.
+    
+    Args:
+        identity: The identity dict to update.
+        **fields: Profile fields to update (bio, location, website, capabilities).
+    
+    Returns:
+        Updated identity dict.
+    """
+    # Update simple fields
+    for key in ["bio", "location", "website"]:
+        if key in fields and fields[key] is not None:
+            identity[key] = fields[key]
+    
+    # Update capabilities (list)
+    if "capabilities" in fields and fields["capabilities"] is not None:
+        identity["capabilities"] = fields["capabilities"]
+    
+    # Ensure reputation exists
+    if "reputation" not in identity:
+        identity["reputation"] = {
+            "proposals_created": 0,
+            "proposals_passed": 0,
+            "votes_cast": 0,
+            "trust_score": 0.0,
+        }
+    
+    save_identity(identity)
+    return identity
+
+
+def get_public_profile(identity: dict) -> dict:
+    """Get the public profile (without private keys).
+    
+    Args:
+        identity: The full identity dict.
+    
+    Returns:
+        Public profile dict safe to share.
+    """
+    return {
+        "name": identity.get("name"),
+        "pubkey": identity.get("pubkey"),
+        "bio": identity.get("bio", ""),
+        "location": identity.get("location", ""),
+        "website": identity.get("website", ""),
+        "capabilities": identity.get("capabilities", []),
+        "reputation": identity.get("reputation", {
+            "proposals_created": 0,
+            "proposals_passed": 0,
+            "votes_cast": 0,
+            "trust_score": 0.0,
+        }),
+        "created": identity.get("created"),
+    }

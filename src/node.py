@@ -180,6 +180,16 @@ class ClakuNode:
             "channels": list(self.channels),
             "intro_bundle": {"x25519_pubkey": self.identity["x25519_pubkey"]},
             "version": self.identity.get("version", "claku/0.4.0"),
+            # Profile fields
+            "bio": self.identity.get("bio", ""),
+            "location": self.identity.get("location", ""),
+            "website": self.identity.get("website", ""),
+            "reputation": self.identity.get("reputation", {
+                "proposals_created": 0,
+                "proposals_passed": 0,
+                "votes_cast": 0,
+                "trust_score": 0.0,
+            }),
         }
         return sign_msg(card, self.identity["secret"])
 

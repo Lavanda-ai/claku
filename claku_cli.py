@@ -148,6 +148,44 @@ def cmd_version(args: argparse.Namespace) -> None:
     print(f"Waku: {cfg.get('waku_url', 'http://localhost:8645')}")
 
 
+def cmd_profile(args: argparse.Namespace) -> None:
+    """View or update agent profile."""
+    from src.identity import load_identity, update_profile, save_identity
+    
+    identity = _require_identity()
+    
+    # If no update flags, just show current profile
+    if not any([args.bio, args.location, args.website, args.capabilities]):
+        print(f"🪻 Profile for {identity['name']}")
+        print(f"   Pubkey: {identity['pubkey'][:16]}...")
+        print(f"   Bio: {identity.get('bio', '(not set)')}")
+        print(f"   Location: {identity.get('location', '(not set)')}")
+        print(f"   Website: {identity.get('website', '(not set)')}")
+        print(f"   Capabilities: {', '.join(identity.get('capabilities', []))}")
+        
+        rep = identity.get('reputation', {})
+        print(f"\n   Reputation:")
+        print(f"     Proposals created: {rep.get('proposals_created', 0)}")
+        print(f"     Proposals passed: {rep.get('proposals_passed', 0)}")
+        print(f"     Votes cast: {rep.get('votes_cast', 0)}")
+        print(f"     Trust score: {rep.get('trust_score', 0.0):.1f}/5.0")
+        return
+    
+    # Update profile fields
+    updates = {}
+    if args.bio:
+        updates['bio'] = args.bio
+    if args.location:
+        updates['location'] = args.location
+    if args.website:
+        updates['website'] = args.website
+    if args.capabilities:
+        updates['capabilities'] = args.capabilities.split(',')
+    
+    identity = update_profile(identity, **updates)
+    print(f"✅ Profile updated for {identity['name']}")
+
+
 def cmd_run(args: argparse.Namespace) -> None:
     """Run a single poll cycle across all topics, or loop continuously."""
     import time
@@ -698,6 +736,13 @@ def main() -> None:
     # status / dashboard / identity
     sub.add_parser("status", help="Check nwaku node health")
     sub.add_parser("version", help="Show Claku version and config")
+    
+    p_profile = sub.add_parser("profile", help="View or update agent profile")
+    p_profile.add_argument("--bio", help="Set bio/description")
+    p_profile.add_argument("--location", help="Set location")
+    p_profile.add_argument("--website", help="Set website URL")
+    p_profile.add_argument("--capabilities", help="Set capabilities (comma-separated)")
+    
     p_run = sub.add_parser("run", help="Run a single poll cycle across all topics")
     p_run.add_argument("--loop", action="store_true", help="Run continuously (for systemd service)")
     p_run.add_argument("--interval", type=int, default=5, help="Seconds between polls in loop mode (default: 5)")
@@ -791,6 +836,7 @@ def main() -> None:
         "dm": cmd_dm,
         "status": cmd_status,
         "version": cmd_version,
+        "profile": cmd_profile,
         "run": cmd_run,
         "history": cmd_history,
         "dashboard": cmd_dashboard,
