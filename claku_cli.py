@@ -699,6 +699,16 @@ def cmd_config(args: argparse.Namespace) -> None:
             print(f"  {k} = {v}")
 
 
+def cmd_update_trust(args: argparse.Namespace) -> None:
+    """Calculate and update trust score from ratings."""
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    score = node.calculate_trust_score()
+    ratings_count = len(node.transport.store_query_json([f'/claku/1/rating/{identity["pubkey"][:16]}/proto'], page_size=100))
+    print(f"✅ Trust score updated: {score:.1f}/5.0")
+    print(f"   Based on {ratings_count} ratings")
+
+
 def _require_identity() -> dict:
     """Load identity or exit with an error message."""
     identity = load_identity()
@@ -733,6 +743,9 @@ def main() -> None:
     p_cfg = sub.add_parser("config", help="Show or set configuration")
     p_cfg.add_argument("key", nargs="?", help="Config key to get/set")
     p_cfg.add_argument("value", nargs="?", help="Value to set")
+    
+    # update-trust
+    sub.add_parser("update-trust", help="Calculate trust score from ratings")
 
     # init
     p_init = sub.add_parser("init", help="Create agent identity")
@@ -936,6 +949,7 @@ def main() -> None:
         "circle-proposals": cmd_circle_proposals,
         "circle-discover": cmd_circle_discover,
         "config": cmd_config,
+        "update-trust": cmd_update_trust,
     }
 
     if args.command in commands:

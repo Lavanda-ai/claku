@@ -1575,3 +1575,25 @@ class ClakuNode:
             all_circles.append(circle_data)
         
         return all_circles
+
+    def calculate_trust_score(self) -> float:
+        """Calculate trust score from received ratings."""
+        topic = f"/claku/1/rating/{self.identity['pubkey'][:16]}/proto"
+        ratings = self.transport.store_query_json([topic], page_size=100)
+        
+        if not ratings:
+            return 0.0
+        
+        total = sum(r.get("score", 0) for r in ratings)
+        count = len(ratings)
+        avg = total / count if count > 0 else 0.0
+        
+        # Update identity
+        if "reputation" not in self.identity:
+            self.identity["reputation"] = {}
+        self.identity["reputation"]["trust_score"] = round(avg, 1)
+        
+        from .identity import save_identity
+        save_identity(self.identity)
+        
+        return avg
