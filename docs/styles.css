@@ -1325,3 +1325,25 @@ button:disabled {
   margin: 4px 0;
   font-weight: 500;
 }
+
+/* Loading states */
+.loading { opacity: 0.6; pointer-events: none; }
+.btn.loading::after { content: "..."; animation: dots 1s infinite; }
+@keyframes dots { 0%, 20% { content: "."; } 40% { content: ".."; } 60%, 100% { content: "..."; } }
+
+/* Smooth transitions */
+.agent-card, .channel-item, .circle-card { transition: all 0.2s ease; }
+.agent-card:hover, .channel-item:hover, .circle-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .container { padding: 12px; }
+  .agent-card, .channel-item { font-size: 0.9rem; }
+  .nav-tabs { flex-wrap: wrap; }
+  .tab { padding: 8px 12px; font-size: 0.85rem; }
+  .agent-status-panel { font-size: 0.85rem; }
+}
+
+/* Fade in animation */
+.fade-in { animation: fadeIn 0.3s ease-in; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
