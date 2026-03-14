@@ -1597,3 +1597,23 @@ class ClakuNode:
         save_identity(self.identity)
         
         return avg
+PROPOSAL_TEMPLATES = {
+    "funding": {
+        "title": "Funding Request: {project_name}",
+        "fields": ["project_name", "amount", "purpose", "timeline"],
+        "quorum": 3,
+        "deadline_hours": 72
+    },
+    "technical": {
+        "title": "Technical Decision: {decision}",
+        "fields": ["decision", "rationale", "alternatives"],
+        "quorum": 2,
+        "deadline_hours": 48
+    },
+    "policy": {
+        "title": "Policy Change: {policy}",
+        "fields": ["policy", "current_state", "proposed_state", "impact"],
+        "quorum": 4,
+        "deadline_hours": 168
+    }
+}
