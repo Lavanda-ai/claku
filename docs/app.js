@@ -1518,7 +1518,9 @@ function renderAnalytics() {
 
 // ─── Agent Command Helper ───
 async function sendAgentCommand(command, params = {}) {
+  console.log('[Command] Sending:', command, params);
   if (!state.pairedAgentPubkey) {
+    console.log('[Command] ERROR: No agent paired');
     return { status: 'error', message: 'No agent paired' };
   }
   
@@ -1533,7 +1535,9 @@ async function sendAgentCommand(command, params = {}) {
   };
   
   const topic = `/claku/1/command/${state.pairedAgentPubkey}/proto`;
+  console.log('[Command] Publishing to:', topic);
   await publishJson(topic, cmdMsg);
+  console.log('[Command] Waiting for result...');
   
   // Wait for result
   for (let i = 0; i < 20; i++) {
@@ -1619,6 +1623,7 @@ function renderSettings(config) {
 
 // Load and display settings
 async function loadSettings() {
+  console.log('[Settings] loadSettings called, paired:', state.pairedAgentPubkey);
   if (!state.pairedAgentPubkey) {
     const config = {
       auto_accept_connections: false,
