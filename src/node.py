@@ -802,6 +802,12 @@ class ClakuNode:
                 print(f"✖ Rejected pairing from {owner_name} (expected {self.identity['owner']})")
                 continue
             
+            # Check expiry (5 minute timeout)
+            expiry = req.get("expiry", 0)
+            if int(time.time()) > expiry:
+                print(f"✖ Rejected expired pairing code {pairing_code}")
+                continue
+            
             self._log_dashboard("pairing_request_recv", {
                 "code": pairing_code,
                 "owner": owner_name,
