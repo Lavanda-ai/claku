@@ -95,6 +95,27 @@ def _save_proposals(proposals: dict[str, dict]) -> None:
     f.write_text(json.dumps(proposals, indent=2))
 
 
+PROPOSAL_TEMPLATES = {
+    "funding": {
+        "title": "Funding Request: {project_name}",
+        "fields": ["project_name", "amount", "purpose", "timeline"],
+        "quorum": 3,
+        "deadline_hours": 72
+    },
+    "technical": {
+        "title": "Technical Decision: {decision}",
+        "fields": ["decision", "rationale", "alternatives"],
+        "quorum": 2,
+        "deadline_hours": 48
+    },
+    "policy": {
+        "title": "Policy Change: {policy}",
+        "fields": ["policy", "current_state", "proposed_state", "impact"],
+        "quorum": 4,
+        "deadline_hours": 168
+    }
+}
+
 class ClakuNode:
     """A Claku agent node — identity + transport + messaging.
 
@@ -1597,23 +1618,95 @@ class ClakuNode:
         save_identity(self.identity)
         
         return avg
-PROPOSAL_TEMPLATES = {
-    "funding": {
-        "title": "Funding Request: {project_name}",
-        "fields": ["project_name", "amount", "purpose", "timeline"],
-        "quorum": 3,
-        "deadline_hours": 72
-    },
-    "technical": {
-        "title": "Technical Decision: {decision}",
-        "fields": ["decision", "rationale", "alternatives"],
-        "quorum": 2,
-        "deadline_hours": 48
-    },
-    "policy": {
-        "title": "Policy Change: {policy}",
-        "fields": ["policy", "current_state", "proposed_state", "impact"],
-        "quorum": 4,
-        "deadline_hours": 168
-    }
-}
+
+    def circle_propose_from_template(self, circle_name: str, template_name: str, fields: dict) -> str:
+        """Create a proposal using a template."""
+        if template_name not in PROPOSAL_TEMPLATES:
+            raise ValueError(f"Unknown template: {template_name}")
+        
+        template = PROPOSAL_TEMPLATES[template_name]
+        
+        # Validate required fields
+        missing = [f for f in template["fields"] if f not in fields]
+        if missing:
+            raise ValueError(f"Missing required fields: {', '.join(missing)}")
+        
+        # Format title
+        title = template["title"].format(**fields)
+        
+        # Build description from fields
+        description = "\n".join([f"**{k}:** {v}" for k, v in fields.items()])
+        
+        # Create proposal with template defaults
+        deadline = int(time.time()) + (template["deadline_hours"] * 3600)
+        return self.circle_propose(
+            circle_name,
+            title,
+            description,
+            deadline,
+            template["quorum"],
+            action_type=template_name
+        )
+
+    def circle_set_voting_mechanism(self, circle_name: str, mechanism: str) -> None:
+        """Set voting mechanism for a circle."""
+        valid_mechanisms = ["simple_majority", "supermajority", "quadratic", "conviction"]
+        if mechanism not in valid_mechanisms:
+            raise ValueError(f"Invalid mechanism. Choose from: {', '.join(valid_mechanisms)}")
+        
+        circles = _load_circles()
+        if circle_name not in circles:
+            raise ValueError(f"Circle '{circle_name}' not found")
+        
+        circles[circle_name]["voting_mechanism"] = mechanism
+        _save_circles(circles)
+        
+        # Announce change
+        msg = {
+            "type": "voting_mechanism_change",
+            "circle": circle_name,
+            "mechanism": mechanism,
+            "changed_by": self.identity["pubkey"],
+            "timestamp": int(time.time())
+        }
+        self.transport.publish_json(CIRCLE_MSG_TOPIC(circle_name), msg)
+    
+    def _count_votes_by_mechanism(self, proposal: dict, circle_name: str) -> dict:
+        """Count votes according to circle's voting mechanism."""
+        circles = _load_circles()
+        mechanism = circles.get(circle_name, {}).get("voting_mechanism", "simple_majority")
+        
+        yes_votes = proposal.get("votes_yes", 0)
+        no_votes = proposal.get("votes_no", 0)
+        total_votes = yes_votes + no_votes
+        quorum = proposal.get("quorum", 2)
+        
+        if total_votes < quorum:
+            return {"passed": False, "reason": "quorum_not_met"}
+        
+        if mechanism == "simple_majority":
+            # >50% yes votes
+            passed = yes_votes > no_votes
+        elif mechanism == "supermajority":
+            # >=66% yes votes
+            passed = yes_votes >= (total_votes * 0.66)
+        elif mechanism == "quadratic":
+            # Quadratic voting: sqrt of votes
+            import math
+            yes_weight = sum(math.sqrt(v) for v in range(1, yes_votes + 1))
+            no_weight = sum(math.sqrt(v) for v in range(1, no_votes + 1))
+            passed = yes_weight > no_weight
+        elif mechanism == "conviction":
+            # Conviction voting: time-weighted
+            # For now, simple implementation: yes > no
+            passed = yes_votes > no_votes
+        else:
+            passed = yes_votes > no_votes
+        
+        return {
+            "passed": passed,
+            "mechanism": mechanism,
+            "yes_votes": yes_votes,
+            "no_votes": no_votes,
+            "total_votes": total_votes
+        }

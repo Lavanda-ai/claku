@@ -709,6 +709,73 @@ def cmd_update_trust(args: argparse.Namespace) -> None:
     print(f"   Based on {ratings_count} ratings")
 
 
+def cmd_circle_propose_template(args: argparse.Namespace) -> None:
+    """Create proposal from template."""
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    
+    # Parse fields from --field key=value format
+    fields = {}
+    if args.fields:
+        for field in args.fields:
+            if "=" not in field:
+                print(f"✖ Invalid field format: {field} (use key=value)")
+                sys.exit(1)
+            key, value = field.split("=", 1)
+            fields[key] = value
+    
+    try:
+        proposal_id = node.circle_propose_from_template(args.circle, args.template, fields)
+        print(f"✔ Proposal created from template '{args.template}'")
+        print(f"  ID: {proposal_id}")
+        print(f"  Circle: {args.circle}")
+    except ValueError as e:
+        print(f"✖ {e}")
+        sys.exit(1)
+
+
+def cmd_circle_voting(args: argparse.Namespace) -> None:
+    """Set voting mechanism for a circle."""
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    
+    try:
+        node.circle_set_voting_mechanism(args.circle, args.mechanism)
+        print(f"✔ Voting mechanism set to '{args.mechanism}' for circle '{args.circle}'")
+    except ValueError as e:
+        print(f"✖ {e}")
+        sys.exit(1)
+    """Create proposal from template."""
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    
+    # Parse fields from --field key=value format
+    fields = {}
+    if args.fields:
+        for field in args.fields:
+            if '=' not in field:
+                print(f"✖ Invalid field format: {field} (use key=value)")
+                sys.exit(1)
+            key, value = field.split('=', 1)
+            fields[key] = value
+    
+    try:
+        proposal_id = node.circle_propose_from_template(args.circle, args.template, fields)
+        print(f"✔ Proposal created from template '{args.template}'")
+        print(f"  ID: {proposal_id}")
+        print(f"  Circle: {args.circle}")
+    except ValueError as e:
+        print(f"✖ {e}")
+        sys.exit(1)
+    """Calculate and update trust score from ratings."""
+    identity = _require_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    score = node.calculate_trust_score()
+    ratings_count = len(node.transport.store_query_json([f'/claku/1/rating/{identity["pubkey"][:16]}/proto'], page_size=100))
+    print(f"✅ Trust score updated: {score:.1f}/5.0")
+    print(f"   Based on {ratings_count} ratings")
+
+
 def _require_identity() -> dict:
     """Load identity or exit with an error message."""
     identity = load_identity()
@@ -894,6 +961,17 @@ def main() -> None:
     p_cp.add_argument("--quorum", type=int, default=2, help="Minimum votes required (default: 2)")
     p_cp.add_argument("--deadline-hours", type=int, default=24, help="Voting deadline in hours (default: 24)")
     p_cp.add_argument("--action-type", default="general", help="Action type (default: general)")
+    
+    # circle-propose-template
+    p_cpt = sub.add_parser("circle-propose-template", help="Create proposal from template")
+    p_cpt.add_argument("--circle", required=True, help="Circle name")
+    p_cpt.add_argument("--template", required=True, choices=["funding", "technical", "policy"], help="Template type")
+    p_cpt.add_argument("--field", dest="fields", action="append", help="Field in key=value format (repeatable)")
+    
+    # circle-voting
+    p_cv = sub.add_parser("circle-voting", help="Set voting mechanism for circle")
+    p_cv.add_argument("--circle", required=True, help="Circle name")
+    p_cv.add_argument("--mechanism", required=True, choices=["simple_majority", "supermajority", "quadratic", "conviction"], help="Voting mechanism")
 
     # circle-vote
     p_cv = sub.add_parser("circle-vote", help="Vote on a proposal")
@@ -945,6 +1023,8 @@ def main() -> None:
         "circle-leave": cmd_circle_leave,
         "circle-list": cmd_circle_list,
         "circle-propose": cmd_circle_propose,
+        "circle-propose-template": cmd_circle_propose_template,
+        "circle-voting": cmd_circle_voting,
         "circle-vote": cmd_circle_vote,
         "circle-proposals": cmd_circle_proposals,
         "circle-discover": cmd_circle_discover,
