@@ -1536,7 +1536,7 @@ async function sendAgentCommand(command, params = {}) {
   
   const topic = `/claku/1/command/${state.pairedAgentPubkey}/proto`;
   console.log('[Command] Publishing to:', topic);
-  await publishJson(topic, cmdMsg);
+  await publishTopic(topic, cmdMsg);
   console.log('[Command] Waiting for result...');
   
   // Wait for result
