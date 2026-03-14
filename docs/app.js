@@ -1550,6 +1550,7 @@ async function sendAgentCommand(command, params = {}) {
   return { status: 'timeout', message: 'Command timed out' };
 }
 function renderSettings(config) {
+  console.log('[Settings] renderSettings called with config:', config);
   return `
     <div class="settings-container">
       <h2>⚙️ Agent Settings</h2>
