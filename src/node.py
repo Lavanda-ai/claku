@@ -803,7 +803,7 @@ class ClakuNode:
                 continue
             
             # Check expiry (5 minute timeout)
-            expiry = req.get("expiry", 0)
+            expiry = req.get("expires_at", req.get("expiry", 0))
             if int(time.time()) > expiry:
                 print(f"✖ Rejected expired pairing code {pairing_code}")
                 continue
