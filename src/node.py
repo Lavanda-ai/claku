@@ -798,8 +798,9 @@ class ClakuNode:
             self._processed_pairing_hashes.add(msg_hash)
             
             # Check if this request is from our configured owner
-            # For now, auto-accept all pairing requests
-            # TODO: Add owner verification logic
+            if owner_name.lower() != self.identity["owner"].lower():
+                print(f"✖ Rejected pairing from {owner_name} (expected {self.identity['owner']})")
+                continue
             
             self._log_dashboard("pairing_request_recv", {
                 "code": pairing_code,
@@ -807,7 +808,7 @@ class ClakuNode:
                 "msg_id": req.get("msg_id", ""),
             })
             
-            # Auto-accept the pairing
+            # Auto-accept the pairing (owner verified)
             self._accept_pairing_request(pairing_code, owner_name)
             processed.append(req)
         
