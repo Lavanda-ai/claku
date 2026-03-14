@@ -919,6 +919,7 @@ function switchTab(name) {
   if (name === 'channels') closeChannel();
   if (name === 'dms') closeDm();
   if (name === 'circles') { closeCircle(); renderCircleList(); }
+  if (name === 'analytics') { $('#tab-analytics').innerHTML = renderAnalytics(); }
 }
 
 // ─── Pairing ───
@@ -1341,3 +1342,170 @@ async function init() {
 }
 
 document.addEventListener('DOMContentLoaded', () => init().catch(console.error));
+// Loading state management
+function showLoading(elementId) {
+  const el = document.getElementById(elementId);
+  if (el) {
+    el.classList.add('loading');
+    el.style.opacity = '0.6';
+  }
+}
+
+function hideLoading(elementId) {
+  const el = document.getElementById(elementId);
+  if (el) {
+    el.classList.remove('loading');
+    el.style.opacity = '1';
+  }
+}
+
+// Empty state helpers
+function showEmptyState(containerId, message, icon = '📭') {
+  const container = document.getElementById(containerId);
+  if (container) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">${icon}</div>
+        <div class="empty-message">${message}</div>
+      </div>
+    `;
+  }
+}
+
+// Notification system
+let notificationsEnabled = false;
+
+async function requestNotificationPermission() {
+  if (!('Notification' in window)) {
+    console.log('Browser does not support notifications');
+    return false;
+  }
+  
+  if (Notification.permission === 'granted') {
+    notificationsEnabled = true;
+    return true;
+  }
+  
+  if (Notification.permission !== 'denied') {
+    const permission = await Notification.requestPermission();
+    notificationsEnabled = permission === 'granted';
+    return notificationsEnabled;
+  }
+  
+  return false;
+}
+
+function showNotification(title, body, icon = '🪻') {
+  if (!notificationsEnabled) return;
+  
+  new Notification(title, {
+    body: body,
+    icon: icon,
+    badge: icon,
+    tag: 'claku-notification'
+  });
+}
+
+// Check for new proposals, DMs, connections
+let lastProposalCount = 0;
+let lastDMCount = 0;
+let lastConnectionCount = 0;
+
+function checkForNotifications(data) {
+  // New proposals
+  const proposalCount = Object.values(data.circles || {}).reduce((sum, c) => sum + (c.proposals?.length || 0), 0);
+  if (proposalCount > lastProposalCount) {
+    showNotification('New Proposal', `${proposalCount - lastProposalCount} new proposal(s) in your circles`);
+  }
+  lastProposalCount = proposalCount;
+  
+  // New DMs
+  const dmCount = data.dms?.length || 0;
+  if (dmCount > lastDMCount) {
+    showNotification('New Message', `${dmCount - lastDMCount} new direct message(s)`);
+  }
+  lastDMCount = dmCount;
+  
+  // New connections (if we add connection tracking)
+  // TODO: implement when connection requests are tracked
+}
+
+// Request permission on load
+window.addEventListener('load', () => {
+  setTimeout(() => requestNotificationPermission(), 2000);
+});
+
+// Analytics tracking
+const analytics = {
+  proposalsCreated: 0,
+  proposalsPassed: 0,
+  votesCast: 0,
+  messagesPerDay: {},
+  activeCircles: new Set(),
+  activityHistory: []
+};
+
+function trackActivity(type, data) {
+  const today = new Date().toISOString().split('T')[0];
+  
+  if (type === 'proposal') {
+    analytics.proposalsCreated++;
+  } else if (type === 'vote') {
+    analytics.votesCast++;
+  } else if (type === 'message') {
+    analytics.messagesPerDay[today] = (analytics.messagesPerDay[today] || 0) + 1;
+  } else if (type === 'circle') {
+    analytics.activeCircles.add(data.circle);
+  }
+  
+  analytics.activityHistory.push({
+    type,
+    timestamp: Date.now(),
+    data
+  });
+  
+  // Keep only last 100 events
+  if (analytics.activityHistory.length > 100) {
+    analytics.activityHistory.shift();
+  }
+}
+
+function renderAnalytics() {
+  const successRate = analytics.proposalsCreated > 0 
+    ? ((analytics.proposalsPassed / analytics.proposalsCreated) * 100).toFixed(1)
+    : 0;
+  
+  const last7Days = Object.entries(analytics.messagesPerDay)
+    .slice(-7)
+    .map(([date, count]) => `${date}: ${count} messages`)
+    .join('\n');
+  
+  return `
+    <div class="analytics-container">
+      <div class="analytics-card">
+        <h3>📊 Activity Overview</h3>
+        <div class="stat">
+          <span class="stat-label">Proposals Created:</span>
+          <span class="stat-value">${analytics.proposalsCreated}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Votes Cast:</span>
+          <span class="stat-value">${analytics.votesCast}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Success Rate:</span>
+          <span class="stat-value">${successRate}%</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Active Circles:</span>
+          <span class="stat-value">${analytics.activeCircles.size}</span>
+        </div>
+      </div>
+      
+      <div class="analytics-card">
+        <h3>📈 Recent Activity</h3>
+        <pre class="activity-log">${last7Days || 'No activity yet'}</pre>
+      </div>
+    </div>
+  `;
+}
