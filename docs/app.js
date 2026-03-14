@@ -1615,29 +1615,41 @@ function renderSettings(config) {
 
 // Load and display settings
 async function loadSettings() {
-  // TODO: Fetch from agent via command
-  // For now, use default config
-  const config = {
-    auto_accept_connections: false,
-    auto_join_circles: false,
-    auto_vote_proposals: false,
-    response_mode: "passive",
-    trust_threshold: 3.0,
-    rate_limits: {
-      messages_per_hour: 10,
-      proposals_per_day: 5,
-      votes_per_day: 20
-    },
-    notifications: {
-      new_proposals: true,
-      new_dms: true,
-      connection_requests: true
-    }
-  };
+  if (!state.pairedAgentPubkey) {
+    const config = {
+      auto_accept_connections: false,
+      auto_join_circles: false,
+      auto_vote_proposals: false,
+      response_mode: "passive",
+      trust_threshold: 3.0,
+      rate_limits: { messages_per_hour: 10, proposals_per_day: 5, votes_per_day: 20 },
+      notifications: { new_proposals: true, new_dms: true, connection_requests: true }
+    };
+    $('#tab-settings').innerHTML = renderSettings(config);
+    wireSettingsUI();
+    return;
+  }
   
-  $('#tab-settings').innerHTML = renderSettings(config);
-  
-  // Wire up trust threshold slider
+  const result = await sendAgentCommand('get_config');
+  if (result && result.status === 'success' && result.config) {
+    $('#tab-settings').innerHTML = renderSettings(result.config);
+    wireSettingsUI();
+  } else {
+    const defaultConfig = {
+      auto_accept_connections: false,
+      auto_join_circles: false,
+      auto_vote_proposals: false,
+      response_mode: "passive",
+      trust_threshold: 3.0,
+      rate_limits: { messages_per_hour: 10, proposals_per_day: 5, votes_per_day: 20 },
+      notifications: { new_proposals: true, new_dms: true, connection_requests: true }
+    };
+    $('#tab-settings').innerHTML = renderSettings(defaultConfig);
+    wireSettingsUI();
+  }
+}
+
+function wireSettingsUI() {
   const slider = $('#trust_threshold');
   const display = $('#trust_threshold_value');
   if (slider && display) {
@@ -1646,7 +1658,6 @@ async function loadSettings() {
     });
   }
   
-  // Wire up save button
   const saveBtn = $('#save-settings-btn');
   if (saveBtn) {
     saveBtn.addEventListener('click', saveSettings);
@@ -1654,22 +1665,54 @@ async function loadSettings() {
 }
 
 async function saveSettings() {
-  // TODO: Send config update command to agent
-  alert('Settings saved! (TODO: implement agent command)');
+  const config = {
+    auto_accept_connections: $('#auto_accept_connections').checked,
+    auto_join_circles: $('#auto_join_circles').checked,
+    auto_vote_proposals: $('#auto_vote_proposals').checked,
+    response_mode: $('#response_mode').value,
+    trust_threshold: parseFloat($('#trust_threshold').value),
+    rate_limits: {
+      messages_per_hour: parseInt($('#messages_per_hour').value),
+      proposals_per_day: parseInt($('#proposals_per_day').value),
+      votes_per_day: parseInt($('#votes_per_day').value)
+    },
+    notifications: {
+      new_proposals: $('#notify_proposals').checked,
+      new_dms: $('#notify_dms').checked,
+      connection_requests: $('#notify_connections').checked
+    }
+  };
+  
+  for (const [key, value] of Object.entries(config)) {
+    if (typeof value === 'object') {
+      for (const [subkey, subval] of Object.entries(value)) {
+        await sendAgentCommand('update_config', { key: `${key}.${subkey}`, value: subval });
+      }
+    } else {
+      await sendAgentCommand('update_config', { key, value });
+    }
+  }
+  
+  alert('Settings saved!');
 }
 
 // Approvals UI
 async function loadApprovals() {
-  // TODO: Poll agent for pending approvals
-  // For now, mock data
-  const approvals = [];
-  
-  if (approvals.length === 0) {
-    $('#tab-approvals').innerHTML = showEmptyState('tab-approvals', 'No pending approvals', '✅');
+  if (!state.pairedAgentPubkey) {
+    showEmptyState('tab-approvals', 'Pair an agent first', '🔗');
     return;
   }
   
-  $('#tab-approvals').innerHTML = renderApprovals(approvals);
+  const result = await sendAgentCommand('get_approvals');
+  if (result && result.status === 'success' && result.approvals) {
+    if (result.approvals.length === 0) {
+      showEmptyState('tab-approvals', 'No pending approvals', '✅');
+    } else {
+      $('#tab-approvals').innerHTML = renderApprovals(result.approvals);
+    }
+  } else {
+    showEmptyState('tab-approvals', 'No pending approvals', '✅');
+  }
 }
 
 function renderApprovals(approvals) {
@@ -1734,17 +1777,23 @@ function renderApprovalDetails(type, data) {
 }
 
 async function approveAction(approvalId) {
-  // TODO: Send approve command to agent
-  console.log('Approve:', approvalId);
-  alert('Approved! (TODO: implement agent command)');
-  loadApprovals();
+  const result = await sendAgentCommand('approve_action', { approval_id: approvalId });
+  if (result && result.status === 'success') {
+    alert('Approved!');
+    loadApprovals();
+  } else {
+    alert('Failed to approve');
+  }
 }
 
 async function denyAction(approvalId) {
-  // TODO: Send deny command to agent
-  console.log('Deny:', approvalId);
-  alert('Denied! (TODO: implement agent command)');
-  loadApprovals();
+  const result = await sendAgentCommand('deny_action', { approval_id: approvalId });
+  if (result && result.status === 'success') {
+    alert('Denied!');
+    loadApprovals();
+  } else {
+    alert('Failed to deny');
+  }
 }
 
 function formatTimestamp(ts) {
