@@ -1509,3 +1509,33 @@ function renderAnalytics() {
     </div>
   `;
 }
+
+// ─── Agent Command Helper ───
+async function sendAgentCommand(command, params = {}) {
+  if (!state.pairedAgentPubkey) {
+    return { status: 'error', message: 'No agent paired' };
+  }
+  
+  const msg_id = Math.floor(100000 + Math.random() * 900000).toString();
+  const cmdMsg = {
+    type: 'command',
+    command: command,
+    params: params,
+    msg_id: msg_id,
+    from: state.pairedAgentPubkey,
+    timestamp: nowTs()
+  };
+  
+  const topic = `/claku/1/command/${state.pairedAgentPubkey}/proto`;
+  await publishJson(topic, cmdMsg);
+  
+  // Wait for result
+  for (let i = 0; i < 20; i++) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const results = await pollCommandResults();
+    const result = results.find(r => r.msg_id === msg_id);
+    if (result) return result;
+  }
+  
+  return { status: 'timeout', message: 'Command timed out' };
+}
