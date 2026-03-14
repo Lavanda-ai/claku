@@ -1541,3 +1541,219 @@ async function sendAgentCommand(command, params = {}) {
   
   return { status: 'timeout', message: 'Command timed out' };
 }
+function renderSettings(config) {
+  return `
+    <div class="settings-container">
+      <h2>⚙️ Agent Settings</h2>
+      
+      <div class="settings-section">
+        <h3>Interaction Settings</h3>
+        <label class="setting-item">
+          <input type="checkbox" id="auto_accept_connections" ${config.auto_accept_connections ? 'checked' : ''}>
+          <span>Auto-accept connection requests</span>
+        </label>
+        <label class="setting-item">
+          <input type="checkbox" id="auto_join_circles" ${config.auto_join_circles ? 'checked' : ''}>
+          <span>Auto-join circles</span>
+        </label>
+        <label class="setting-item">
+          <input type="checkbox" id="auto_vote_proposals" ${config.auto_vote_proposals ? 'checked' : ''}>
+          <span>Auto-vote on proposals</span>
+        </label>
+        
+        <div class="setting-item">
+          <label>Response Mode:</label>
+          <select id="response_mode">
+            <option value="silent" ${config.response_mode === 'silent' ? 'selected' : ''}>Silent (never respond)</option>
+            <option value="passive" ${config.response_mode === 'passive' ? 'selected' : ''}>Passive (respond when mentioned)</option>
+            <option value="active" ${config.response_mode === 'active' ? 'selected' : ''}>Active (participate freely)</option>
+          </select>
+        </div>
+        
+        <div class="setting-item">
+          <label>Trust Threshold: <span id="trust_threshold_value">${config.trust_threshold}</span>/5.0</label>
+          <input type="range" id="trust_threshold" min="0" max="5" step="0.5" value="${config.trust_threshold}">
+        </div>
+      </div>
+      
+      <div class="settings-section">
+        <h3>Rate Limits</h3>
+        <div class="setting-item">
+          <label>Messages per hour:</label>
+          <input type="number" id="messages_per_hour" value="${config.rate_limits.messages_per_hour}" min="1" max="100">
+        </div>
+        <div class="setting-item">
+          <label>Proposals per day:</label>
+          <input type="number" id="proposals_per_day" value="${config.rate_limits.proposals_per_day}" min="1" max="50">
+        </div>
+        <div class="setting-item">
+          <label>Votes per day:</label>
+          <input type="number" id="votes_per_day" value="${config.rate_limits.votes_per_day}" min="1" max="100">
+        </div>
+      </div>
+      
+      <div class="settings-section">
+        <h3>Notifications</h3>
+        <label class="setting-item">
+          <input type="checkbox" id="notify_proposals" ${config.notifications.new_proposals ? 'checked' : ''}>
+          <span>New proposals</span>
+        </label>
+        <label class="setting-item">
+          <input type="checkbox" id="notify_dms" ${config.notifications.new_dms ? 'checked' : ''}>
+          <span>New DMs</span>
+        </label>
+        <label class="setting-item">
+          <input type="checkbox" id="notify_connections" ${config.notifications.connection_requests ? 'checked' : ''}>
+          <span>Connection requests</span>
+        </label>
+      </div>
+      
+      <button id="save-settings-btn" class="btn">Save Settings</button>
+    </div>
+  `;
+}
+
+// Load and display settings
+async function loadSettings() {
+  // TODO: Fetch from agent via command
+  // For now, use default config
+  const config = {
+    auto_accept_connections: false,
+    auto_join_circles: false,
+    auto_vote_proposals: false,
+    response_mode: "passive",
+    trust_threshold: 3.0,
+    rate_limits: {
+      messages_per_hour: 10,
+      proposals_per_day: 5,
+      votes_per_day: 20
+    },
+    notifications: {
+      new_proposals: true,
+      new_dms: true,
+      connection_requests: true
+    }
+  };
+  
+  $('#tab-settings').innerHTML = renderSettings(config);
+  
+  // Wire up trust threshold slider
+  const slider = $('#trust_threshold');
+  const display = $('#trust_threshold_value');
+  if (slider && display) {
+    slider.addEventListener('input', () => {
+      display.textContent = slider.value;
+    });
+  }
+  
+  // Wire up save button
+  const saveBtn = $('#save-settings-btn');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', saveSettings);
+  }
+}
+
+async function saveSettings() {
+  // TODO: Send config update command to agent
+  alert('Settings saved! (TODO: implement agent command)');
+}
+
+// Approvals UI
+async function loadApprovals() {
+  // TODO: Poll agent for pending approvals
+  // For now, mock data
+  const approvals = [];
+  
+  if (approvals.length === 0) {
+    $('#tab-approvals').innerHTML = showEmptyState('tab-approvals', 'No pending approvals', '✅');
+    return;
+  }
+  
+  $('#tab-approvals').innerHTML = renderApprovals(approvals);
+}
+
+function renderApprovals(approvals) {
+  return `
+    <div class="approvals-container">
+      <h2>⏳ Pending Approvals (${approvals.length})</h2>
+      ${approvals.map(a => renderApprovalCard(a)).join('')}
+    </div>
+  `;
+}
+
+function renderApprovalCard(approval) {
+  const typeIcons = {
+    'connection_request': '🤝',
+    'circle_join': '⊙',
+    'proposal_vote': '🗳️',
+    'send_dm': '💬'
+  };
+  
+  const icon = typeIcons[approval.type] || '❓';
+  const data = approval.data;
+  
+  return `
+    <div class="approval-card">
+      <div class="approval-header">
+        <span class="approval-icon">${icon}</span>
+        <span class="approval-type">${approval.type.replace('_', ' ')}</span>
+        <span class="approval-time">${formatTimestamp(approval.requested_at)}</span>
+      </div>
+      <div class="approval-body">
+        ${renderApprovalDetails(approval.type, data)}
+      </div>
+      <div class="approval-actions">
+        <button class="btn btn-success" onclick="approveAction('${approval.id}')">Approve</button>
+        <button class="btn btn-danger" onclick="denyAction('${approval.id}')">Deny</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderApprovalDetails(type, data) {
+  if (type === 'connection_request') {
+    return `
+      <p><strong>${data.from_name}</strong> wants to connect</p>
+      <p class="approval-detail">Trust: ${data.trust_score || 'Unknown'}/5.0</p>
+      <p class="approval-detail">Message: "${data.message}"</p>
+    `;
+  } else if (type === 'circle_join') {
+    return `
+      <p>Join circle: <strong>${data.circle}</strong></p>
+      <p class="approval-detail">Reason: ${data.reason}</p>
+    `;
+  } else if (type === 'proposal_vote') {
+    return `
+      <p>Vote on: <strong>${data.proposal_title}</strong></p>
+      <p class="approval-detail">Circle: ${data.circle}</p>
+      <p class="approval-detail">Vote: ${data.vote}</p>
+    `;
+  }
+  
+  return `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+}
+
+async function approveAction(approvalId) {
+  // TODO: Send approve command to agent
+  console.log('Approve:', approvalId);
+  alert('Approved! (TODO: implement agent command)');
+  loadApprovals();
+}
+
+async function denyAction(approvalId) {
+  // TODO: Send deny command to agent
+  console.log('Deny:', approvalId);
+  alert('Denied! (TODO: implement agent command)');
+  loadApprovals();
+}
+
+function formatTimestamp(ts) {
+  const date = new Date(ts * 1000);
+  const now = new Date();
+  const diff = Math.floor((now - date) / 1000);
+  
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
