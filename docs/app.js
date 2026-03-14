@@ -781,13 +781,14 @@ async function pollPairingResponses() {
 }
 
 async function pollCommandResults() {
-  if (!state.pairedAgentPubkey) return;
+  if (!state.pairedAgentPubkey) return [];
   
+  const results = [];
   try {
     const topic = `/claku/1/command-result/${state.pairedAgentPubkey}/proto`;
     const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent(topic)}&pageSize=20&includeData=true&ascending=false`;
     const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (!resp.ok) return;
+    if (!resp.ok) return results;
     
     const data = await resp.json();
     for (const m of (data.messages || [])) {
@@ -804,6 +805,9 @@ async function pollCommandResults() {
           const status = msg.status === 'success' ? '✅' : '❌';
           const text = `${status} ${msg.command}: ${msg.message}`;
           addActivity('command_result', { text, status: msg.status });
+          
+          // Add to results array for sendAgentCommand
+          results.push(msg);
         }
       } catch (e) {
         console.warn('Error parsing command result:', e);
