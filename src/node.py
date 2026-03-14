@@ -802,15 +802,25 @@ class ClakuNode:
                 print(f"✖ Rejected pairing from {owner_name} (expected {self.identity['owner']})")
                 continue
             
+            # Check expiry
+            expiry = req.get("expiry", 0)
+            if int(time.time()) > expiry:
+                print(f"✖ Rejected expired pairing code {pairing_code}")
+                continue
+            
             self._log_dashboard("pairing_request_recv", {
                 "code": pairing_code,
                 "owner": owner_name,
                 "msg_id": req.get("msg_id", ""),
             })
             
-            # Auto-accept the pairing (owner verified)
+            # Auto-accept the pairing (owner verified, not expired)
             self._accept_pairing_request(pairing_code, owner_name)
             processed.append(req)
+        
+        # Save processed hashes
+        with open(processed_file, 'w') as f:
+            json.dump(list(processed_hashes)[-1000:], f)  # Keep last 1000
         
         return processed
     
@@ -821,6 +831,17 @@ class ClakuNode:
             code: The 6-digit pairing code
             owner_name: Name of the human requesting pairing
         """
+        # Store active pairing session
+        session_file = CLAKU_DIR / "active_pairing.json"
+        session = {
+            "code": code,
+            "owner": owner_name,
+            "timestamp": int(time.time()),
+            "agent_pubkey": self.identity["pubkey"]
+        }
+        with open(session_file, 'w') as f:
+            json.dump(session, f)
+        
         # Publish pairing acceptance
         acceptance = {
             "type": "pairing_accept",
