@@ -1642,9 +1642,13 @@ async function loadSettings() {
   
   const result = await sendAgentCommand('get_config');
   if (result && result.status === 'success' && result.config) {
-    $('#tab-settings').innerHTML = renderSettings(result.config);
+    const html = renderSettings(result.config);
+    console.log('[Settings] HTML length:', html.length);
+    $('#tab-settings').innerHTML = html;
+    console.log('[Settings] innerHTML set, element:', $('#tab-settings'));
     wireSettingsUI();
   } else {
+    console.log('[Settings] Using default config, result was:', result);
     const defaultConfig = {
       auto_accept_connections: false,
       auto_join_circles: false,
