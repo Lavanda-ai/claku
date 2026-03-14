@@ -717,6 +717,37 @@ class ClakuNode:
                     result = {"status": "success", "message": f"Left channel #{channel}"}
                 else:
                     result = {"status": "error", "message": "Not in that channel"}
+            elif command == "get_config":
+                from .agent_config import load_agent_config
+                config = load_agent_config()
+                result = {"status": "success", "config": config}
+            elif command == "update_config":
+                from .agent_config import update_agent_config
+                key = params.get("key", "")
+                value = params.get("value")
+                if key and value is not None:
+                    update_agent_config(key, value)
+                    result = {"status": "success", "message": f"Updated {key}"}
+                else:
+                    result = {"status": "error", "message": "Missing key or value"}
+            elif command == "get_approvals":
+                from .approval_queue import get_pending_approvals
+                approvals = get_pending_approvals()
+                result = {"status": "success", "approvals": approvals}
+            elif command == "approve_action":
+                from .approval_queue import approve_action
+                approval_id = params.get("approval_id", "")
+                if approval_id and approve_action(approval_id):
+                    result = {"status": "success", "message": f"Approved {approval_id}"}
+                else:
+                    result = {"status": "error", "message": "Approval not found"}
+            elif command == "deny_action":
+                from .approval_queue import deny_action
+                approval_id = params.get("approval_id", "")
+                if approval_id and deny_action(approval_id):
+                    result = {"status": "success", "message": f"Denied {approval_id}"}
+                else:
+                    result = {"status": "error", "message": "Approval not found"}
             else:
                 result = {"status": "error", "message": f"Unknown command: {command}"}
                 self._log_dashboard("command_error", {
