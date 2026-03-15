@@ -1468,3 +1468,75 @@ button:active {
   max-height: 200px;
   overflow-y: auto;
 }
+
+/* Settings */
+.settings-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.settings-section {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.settings-section h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #a78bfa;
+}
+
+.setting-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 15px;
+  gap: 10px;
+}
+
+.setting-item label {
+  min-width: 150px;
+  color: #e5e7eb;
+}
+
+.setting-item input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.setting-item input[type="number"],
+.setting-item input[type="range"],
+.setting-item select {
+  flex: 1;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  border-radius: 4px;
+  color: #e5e7eb;
+  font-size: 14px;
+}
+
+.setting-item input[type="range"] {
+  cursor: pointer;
+}
+
+#save-settings-btn {
+  width: 100%;
+  padding: 12px;
+  background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+#save-settings-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(167, 139, 250, 0.4);
+}
