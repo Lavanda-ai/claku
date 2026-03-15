@@ -1955,3 +1955,74 @@ class ClakuNode:
             msg += f" (Reason: {reason})"
         self.send_circle_message(circle_name, msg)
         return True
+
+    def circle_kick_member(self, circle_name: str, member_name: str, reason: str = "") -> bool:
+        """Kick a member from circle (creator only)."""
+        circles_file = CLAKU_DIR / "circles" / "membership.json"
+        
+        if not circles_file.exists():
+            print("✖ Circles not found")
+            return False
+        
+        import json
+        with open(circles_file, 'r') as f:
+            circles = json.load(f)
+        
+        circle = circles.get(circle_name)
+        if not circle:
+            print(f"✖ Circle '{circle_name}' not found")
+            return False
+        
+        # Check if we're the creator
+        if circle["created_by"] != self.identity["name"]:
+            print(f"✖ Only circle creator can kick members")
+            return False
+        
+        # Can't kick yourself
+        if member_name == self.identity["name"]:
+            print(f"✖ Cannot kick yourself")
+            return False
+        
+        # Find and remove member
+        members = circle.get("members", [])
+        member_found = False
+        new_members = []
+        
+        for member in members:
+            if member["name"] == member_name:
+                member_found = True
+            else:
+                new_members.append(member)
+        
+        if not member_found:
+            print(f"✖ '{member_name}' is not a member of this circle")
+            return False
+        
+        circle["members"] = new_members
+        
+        # Add to kicked list
+        if "kicked" not in circle:
+            circle["kicked"] = []
+        
+        circle["kicked"].append({
+            "agent": member_name,
+            "reason": reason,
+            "timestamp": int(time.time()),
+            "kicked_by": self.identity["name"]
+        })
+        
+        # Save
+        with open(circles_file, 'w') as f:
+            json.dump(circles, f, indent=2)
+        
+        print(f"🚫 Kicked '{member_name}' from circle '{circle_name}'")
+        if reason:
+            print(f"   Reason: {reason}")
+        
+        # Announce to circle
+        msg = f"🚫 {member_name} was removed from the circle"
+        if reason:
+            msg += f" (Reason: {reason})"
+        self.send_circle_message(circle_name, msg)
+        
+        return True

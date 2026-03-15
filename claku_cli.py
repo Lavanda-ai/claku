@@ -996,6 +996,11 @@ def main() -> None:
     p_reject.add_argument("proposal", help="Proposal ID")
     p_reject.add_argument("--reason", help="Rejection reason")
     
+    p_kick = sub.add_parser("circle-kick", help="Kick member from circle (creator only)")
+    p_kick.add_argument("circle", help="Circle name")
+    p_kick.add_argument("member", help="Member name to kick")
+    p_kick.add_argument("--reason", help="Kick reason")
+    
 
     args = parser.parse_args()
 
@@ -1045,6 +1050,7 @@ def main() -> None:
         "circle-messages": cmd_circle_messages,
         "circle-approve": cmd_circle_approve,
         "circle-reject": cmd_circle_reject,
+        "circle-kick": cmd_circle_kick,
         "circle-discover": cmd_circle_discover,
         "config": cmd_agent_config,
         "update-trust": cmd_update_trust,
@@ -1252,6 +1258,15 @@ def cmd_circle_reject(args):
     identity = load_identity()
     node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
     node.circle_reject_proposal(args.circle, args.proposal, args.reason or "")
+def cmd_circle_kick(args):
+    """Kick a member from circle (creator only)."""
+    from src.node import ClakuNode
+    from src.identity import load_identity
+    
+    identity = load_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    node.circle_kick_member(args.circle, args.member, args.reason or "")
+
 if __name__ == "__main__":
     main()
 
