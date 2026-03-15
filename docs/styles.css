@@ -1570,3 +1570,17 @@ button:active {
 .send-form button:hover {
   background: #333;
 }
+
+/* Circle Ownership */
+.list-item.owner {
+  border-left: 3px solid #fbbf24;
+}
+
+.list-item.member {
+  border-left: 3px solid #4ade80;
+}
+
+.list-item.other {
+  border-left: 3px solid #666;
+  opacity: 0.7;
+}
