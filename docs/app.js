@@ -920,6 +920,7 @@ async function subscribeDefaults() {
 function switchTab(name) {
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   $$('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+  console.log('[switchTab] Switched to:', name, 'Active panels:', $$('.tab-panel.active').length);
   if (name === 'channels') closeChannel();
   if (name === 'dms') closeDm();
   if (name === 'circles') { closeCircle(); renderCircleList(); }
