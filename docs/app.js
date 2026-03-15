@@ -201,6 +201,33 @@ async function openChannel(name) {
   subscribeChannel(name);
 }
 
+
+async function sendChannelMessage() {
+  const input = $('#channel-input');
+  const text = input.value.trim();
+  if (!text || !state.currentChannel) return;
+  
+  const channel = state.currentChannel.replace('#', '');
+  const topic = `/claku/1/channel/${channel}/proto`;
+  
+  const message = {
+    type: 'channel_message',
+    channel: channel,
+    from: 'human',
+    from_pubkey: state.pairedAgentPubkey || 'dashboard',
+    text: text,
+    timestamp: nowTs(),
+    msg_id: crypto.randomUUID?.() || '' + Date.now()
+  };
+  
+  const ok = await publishTopic(topic, message);
+  if (ok) {
+    input.value = '';
+    // Refresh messages
+    setTimeout(() => openChannel(state.currentChannel), 1000);
+  }
+}
+
 function closeChannel() {
   state.currentChannel = null;
   dom.channelView.classList.add('hidden');

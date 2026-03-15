@@ -1537,3 +1537,36 @@ button:active {
   font-size: 11px;
   font-style: italic;
 }
+
+/* Send Form */
+.send-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #333;
+}
+
+.send-form input {
+  flex: 1;
+  padding: 8px 12px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #ccc;
+  font-size: 14px;
+}
+
+.send-form button {
+  padding: 8px 16px;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.send-form button:hover {
+  background: #333;
+}
