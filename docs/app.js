@@ -1540,7 +1540,7 @@ async function sendAgentCommand(command, params = {}) {
   console.log('[Command] Waiting for result...');
   
   // Wait for result
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 40; i++) {
     await new Promise(resolve => setTimeout(resolve, 500));
     const results = await pollCommandResults();
     const result = results.find(r => r.msg_id === msg_id);
