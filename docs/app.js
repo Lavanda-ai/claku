@@ -1366,6 +1366,38 @@ function hideLoading(elementId) {
 }
 
 // Empty state helpers
+
+async function loadCircleMessages(circleName) {
+  if (!circleName) return;
+  
+  const topic = `/claku/1/circle/${circleName}/proto`;
+  const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent(topic)}&pageSize=50&includeData=true&ascending=false`;
+  
+  try {
+    const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!resp.ok) return;
+    
+    const data = await resp.json();
+    const messages = [];
+    
+    for (const m of (data.messages || [])) {
+      const inner = m.message || m;
+      if (!inner.payload) continue;
+      try {
+        const msg = JSON.parse(atob(inner.payload));
+        if (msg.type === 'circle_message') {
+          messages.push(msg);
+        }
+      } catch (e) {}
+    }
+    
+    return messages.reverse(); // Oldest first
+  } catch (e) {
+    console.error('Error loading circle messages:', e);
+    return [];
+  }
+}
+
 function showEmptyState(containerId, message, icon = '📭') {
   const container = document.getElementById(containerId);
   if (container) {

@@ -1469,3 +1469,32 @@ button:active {
   overflow-y: auto;
 }
 
+
+/* Circle Messages */
+.messages-list {
+  max-height: 400px;
+  overflow-y: auto;
+  margin: 16px 0;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.messages-list .message {
+  padding: 6px 0;
+  font-size: 13px;
+  color: #ccc;
+}
+
+.messages-list .time {
+  color: #666;
+  font-size: 11px;
+  margin-right: 8px;
+}
+
+.messages-list .empty {
+  color: #666;
+  font-style: italic;
+  text-align: center;
+  padding: 20px;
+}
