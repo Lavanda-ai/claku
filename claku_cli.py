@@ -957,6 +957,15 @@ def main() -> None:
     # circle-proposals
     p_cps = sub.add_parser("circle-proposals", help="List proposals in a Circle")
     p_cps.add_argument("--circle", required=True, help="Circle name")
+    
+    p_circle_send = sub.add_parser("circle-send", help="Send message to circle channel")
+    p_circle_send.add_argument("--circle", required=True, help="Circle name")
+    p_circle_send.add_argument("--text", required=True, help="Message text")
+    
+    p_circle_msgs = sub.add_parser("circle-messages", help="View circle messages")
+    p_circle_msgs.add_argument("circle", help="Circle name")
+    p_circle_msgs.add_argument("--limit", type=int, help="Max messages")
+    
 
     args = parser.parse_args()
 
@@ -1002,6 +1011,8 @@ def main() -> None:
         "circle-voting": cmd_circle_voting,
         "circle-vote": cmd_circle_vote,
         "circle-proposals": cmd_circle_proposals,
+        "circle-send": cmd_circle_send,
+        "circle-messages": cmd_circle_messages,
         "circle-discover": cmd_circle_discover,
         "config": cmd_agent_config,
         "update-trust": cmd_update_trust,
@@ -1162,6 +1173,37 @@ def cmd_agent_config(args: argparse.Namespace) -> None:
         print(f"    Connection requests: {config['notifications']['connection_requests']}")
 
 
+def cmd_circle_send(args: argparse.Namespace) -> None:
+    """Send message to circle channel."""
+    from src.node import ClakuNode
+    from src.identity import load_identity
+    
+    identity = load_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    node.send_circle_message(args.circle, args.text)
+
+def cmd_circle_messages(args: argparse.Namespace) -> None:
+    """View circle messages."""
+    from src.node import ClakuNode
+    from src.identity import load_identity
+    
+    identity = load_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    messages = node.poll_circle_messages(args.circle, limit=args.limit or 50)
+    
+    if not messages:
+        print(f"No messages in circle '{args.circle}'")
+        return
+    
+    print(f"\n💬 {args.circle} ({len(messages)} messages):\n")
+    for msg in messages[-20:]:
+        from_agent = msg.get("from", "?")
+        text = msg.get("text", "")
+        timestamp = msg.get("timestamp", 0)
+        from datetime import datetime
+        time_str = datetime.fromtimestamp(timestamp).strftime("%H:%M")
+        print(f"  [{time_str}] {from_agent}: {text}")
 if __name__ == "__main__":
     main()
+
 

@@ -1791,3 +1791,63 @@ class ClakuNode:
         import json
         with open(cmd_file, 'w') as f:
             json.dump(list(self._processed_commands), f)
+
+    def send_circle_message(self, circle_name: str, text: str) -> bool:
+        """Send message to circle channel (private, members only)."""
+        # Load circles from membership.json
+        circles_file = CLAKU_DIR / "circles" / "membership.json"
+        if not circles_file.exists():
+            print(f"✖ No circles found")
+            return False
+        
+        import json
+        with open(circles_file, 'r') as f:
+            circles = json.load(f)
+        
+        circle = circles.get(circle_name)
+        if not circle:
+            print(f"✖ Circle '{circle_name}' not found")
+            return False
+        
+        # Check membership
+        member_names = [m.get("name") for m in circle.get("members", [])]
+        if self.identity["name"] not in member_names:
+            print(f"✖ Not a member of '{circle_name}'")
+            return False
+        
+        topic = f"/claku/1/circle/{circle_name}/proto"
+        message = {
+            "type": "circle_message",
+            "circle": circle_name,
+            "from": self.identity["name"],
+            "from_pubkey": self.identity["pubkey"],
+            "text": text,
+            "timestamp": int(time.time()),
+            "msg_id": str(uuid.uuid4())
+        }
+        
+        self.transport.publish_json(topic, message)
+        print(f"✓ [{circle_name}] {self.identity['name']}: {text}")
+        return True
+    
+    def poll_circle_messages(self, circle_name: str, limit: int = 50) -> list[dict]:
+        """Poll messages from circle channel (members only)."""
+        circles_file = CLAKU_DIR / "circles" / "membership.json"
+        if not circles_file.exists():
+            return []
+        
+        import json
+        with open(circles_file, 'r') as f:
+            circles = json.load(f)
+        
+        circle = circles.get(circle_name)
+        if not circle:
+            return []
+        
+        member_names = [m.get("name") for m in circle.get("members", [])]
+        if self.identity["name"] not in member_names:
+            return []
+        
+        topic = f"/claku/1/circle/{circle_name}/proto"
+        messages = self.transport.store_query_json([topic], page_size=limit)
+        return [m for m in messages if m.get("type") == "circle_message"]
