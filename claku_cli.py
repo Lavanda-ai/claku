@@ -675,30 +675,6 @@ def cmd_circle_discover(args: argparse.Namespace) -> None:
         print(f"    Creator: {c.get('creator', 'unknown')}")
 
 
-def cmd_config(args: argparse.Namespace) -> None:
-    """Show or set configuration."""
-    config = load_config()
-    if args.key and args.value:
-        # Parse booleans and ints
-        val = args.value
-        if val.lower() in ("true", "false"):
-            val = val.lower() == "true"
-        else:
-            try:
-                val = int(val)
-            except ValueError:
-                pass
-        config[args.key] = val
-        save_config(config)
-        print(f"✔ {args.key} = {val}")
-    elif args.key:
-        print(f"{args.key} = {config.get(args.key, '(not set)')}")
-    else:
-        print("Claku Configuration:")
-        for k, v in sorted(config.items()):
-            print(f"  {k} = {v}")
-
-
 def cmd_update_trust(args: argparse.Namespace) -> None:
     """Calculate and update trust score from ratings."""
     identity = _require_identity()
@@ -807,9 +783,8 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command")
 
     # config
-    p_cfg = sub.add_parser("config", help="Show or set configuration")
-    p_cfg.add_argument("key", nargs="?", help="Config key to get/set")
-    p_cfg.add_argument("value", nargs="?", help="Value to set")
+    p_cfg = sub.add_parser("config", help="Show or set agent configuration")
+    p_cfg.add_argument("--set", help="Set config value (key=value)")
     
     # update-trust
     sub.add_parser("update-trust", help="Calculate trust score from ratings")
@@ -1028,7 +1003,7 @@ def main() -> None:
         "circle-vote": cmd_circle_vote,
         "circle-proposals": cmd_circle_proposals,
         "circle-discover": cmd_circle_discover,
-        "config": cmd_config,
+        "config": cmd_agent_config,
         "update-trust": cmd_update_trust,
     }
 
@@ -1149,5 +1124,44 @@ def cmd_connect_list(args):
         trust_level = ["SEEN", "CONTACTED", "TRUSTED", "CIRCLE"][c.get("trust", 0)]
         print(f"{c.get('name', '?')} ({c.get('pubkey', '')[:16]}...) - {trust_level}")
 
+def cmd_agent_config(args: argparse.Namespace) -> None:
+    """View or update agent configuration."""
+    from src.agent_config import load_agent_config, update_agent_config
+    
+    config = load_agent_config()
+    
+    if args.set:
+        key, value = args.set.split('=', 1)
+        # Parse value
+        if value.lower() == 'true':
+            value = True
+        elif value.lower() == 'false':
+            value = False
+        elif value.isdigit():
+            value = int(value)
+        elif value.replace('.', '', 1).isdigit():
+            value = float(value)
+        
+        update_agent_config(key, value)
+        print(f"✓ Set {key} = {value}")
+    else:
+        # Show current config
+        print("\n📋 Agent Configuration:\n")
+        print(f"  Auto-accept connections: {config['auto_accept_connections']}")
+        print(f"  Auto-join circles: {config['auto_join_circles']}")
+        print(f"  Auto-vote proposals: {config['auto_vote_proposals']}")
+        print(f"  Response mode: {config['response_mode']}")
+        print(f"  Trust threshold: {config['trust_threshold']}")
+        print(f"\n  Rate limits:")
+        print(f"    Messages/hour: {config['rate_limits']['messages_per_hour']}")
+        print(f"    Proposals/day: {config['rate_limits']['proposals_per_day']}")
+        print(f"    Votes/day: {config['rate_limits']['votes_per_day']}")
+        print(f"\n  Notifications:")
+        print(f"    New proposals: {config['notifications']['new_proposals']}")
+        print(f"    New DMs: {config['notifications']['new_dms']}")
+        print(f"    Connection requests: {config['notifications']['connection_requests']}")
+
+
 if __name__ == "__main__":
     main()
+
