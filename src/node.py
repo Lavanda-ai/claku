@@ -150,6 +150,7 @@ class ClakuNode:
         self.connections = ConnectionManager()
         self.workspace_mgr = None  # Lazy init
         self._processed_commands: set[str] = self._load_processed_commands()
+        self._processed_pairings: set[str] = set()
         self._ensure_subscribed()
 
     def _ensure_subscribed(self) -> None:
@@ -845,20 +846,15 @@ class ClakuNode:
             if not pairing_code:
                 continue
             
-            # Skip if we've already processed this request
-            # (Store returns historical messages, so we need deduplication)
-            if hasattr(self, '_processed_pairing_hashes'):
-                if msg_hash in self._processed_pairing_hashes:
-                    continue
-            else:
-                self._processed_pairing_hashes = set()
-            
-            # Mark as processed
-            self._processed_pairing_hashes.add(msg_hash)
+            # Skip if already processed
+            if msg_hash and msg_hash in self._processed_pairings:
+                continue
             
             # Check if this request is from our configured owner
             if owner_name.lower() != self.identity["owner"].lower():
                 print(f"✖ Rejected pairing from {owner_name} (expected {self.identity['owner']})")
+                if msg_hash:
+                    self._processed_pairings.add(msg_hash)
                 continue
             
             # Check expiry (5 minute timeout)
