@@ -319,6 +319,13 @@ class WakuTransport:
                 payload = msg.get("payload", b"")
                 if payload:
                     try:
+                        # Decode bytes to string first
+                        if isinstance(payload, bytes):
+                            try:
+                                payload = payload.decode("utf-8")
+                            except UnicodeDecodeError:
+                                # Skip corrupted messages
+                                continue
                         parsed = json.loads(payload)
                         parsed["_message_hash"] = msg.get("message_hash", "")
                         parsed["_content_topic"] = msg.get("content_topic", "")
