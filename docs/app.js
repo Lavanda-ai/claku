@@ -1367,6 +1367,34 @@ function hideLoading(elementId) {
 
 // Empty state helpers
 
+async function loadCircleProposals(circleName) {
+  const topic = `/claku/1/proposal/${circleName}/proto`;
+  const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent(topic)}&pageSize=50&includeData=true&ascending=false`;
+  
+  try {
+    const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!resp.ok) return [];
+    
+    const data = await resp.json();
+    const proposals = [];
+    
+    for (const m of (data.messages || [])) {
+      const inner = m.message || m;
+      if (!inner.payload) continue;
+      try {
+        const msg = JSON.parse(atob(inner.payload));
+        if (msg.type === 'proposal') {
+          proposals.push(msg);
+        }
+      } catch (e) {}
+    }
+    
+    return proposals.reverse();
+  } catch (e) {
+    return [];
+  }
+}
+
 async function loadCircleMessages(circleName) {
   if (!circleName) return;
   

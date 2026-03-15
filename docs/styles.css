@@ -1498,3 +1498,42 @@ button:active {
   text-align: center;
   padding: 20px;
 }
+
+/* Proposals */
+.proposals-list {
+  margin: 16px 0;
+}
+
+.proposal {
+  padding: 12px;
+  margin-bottom: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-left: 3px solid #666;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.proposal.approved {
+  border-left-color: #4ade80;
+}
+
+.proposal.rejected {
+  border-left-color: #f87171;
+}
+
+.proposal.pending {
+  border-left-color: #fbbf24;
+}
+
+.proposal-desc {
+  color: #999;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.proposal .rejection {
+  color: #f87171;
+  margin-top: 4px;
+  font-size: 11px;
+  font-style: italic;
+}
