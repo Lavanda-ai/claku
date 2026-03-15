@@ -924,7 +924,7 @@ function switchTab(name) {
   if (name === 'dms') closeDm();
   if (name === 'circles') { closeCircle(); renderCircleList(); }
   if (name === 'analytics') { $('#tab-analytics').innerHTML = renderAnalytics(); }
-  if (name === 'settings' && state.pairedAgentPubkey) { loadSettings(); }
+  if (name === 'settings') { loadSettings(); }
   if (name === 'approvals' && state.pairedAgentPubkey) { loadApprovals(); }
 }
 
