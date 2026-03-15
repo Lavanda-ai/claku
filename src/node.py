@@ -149,6 +149,7 @@ class ClakuNode:
         self.pairing = PairingManager(self.identity, waku_url, auto_sharding=auto_sharding)
         self.connections = ConnectionManager()
         self.workspace_mgr = None  # Lazy init
+        self._processed_commands: set[str] = self._load_processed_commands()
         self._ensure_subscribed()
 
     def _ensure_subscribed(self) -> None:
@@ -591,20 +592,47 @@ class ClakuNode:
             List of command dicts.
         """
         topic = f"/claku/1/command/{self.identity['pubkey']}/proto"
-        messages = self.transport.poll_json(topic)
+        # Use Store instead of Relay - agent runs 24/7 and Relay messages expire
+        messages = self.transport.store_query_json([topic], page_size=20)
         commands = [m for m in messages if m.get("type") == "command"]
         
+        processed = []
         for cmd in commands:
+            msg_id = cmd.get("msg_id", "")
+            msg_hash = cmd.get("_message_hash", "")
+            
+            # Skip if already processed (check both msg_id and hash)
+            if msg_id and msg_id in self._processed_commands:
+                print(f"[DEDUP] Skipping already processed msg_id: {msg_id}")
+                continue
+            if msg_hash and msg_hash in self._processed_commands:
+                print(f"[DEDUP] Skipping already processed hash: {msg_hash[:16]}")
+                continue
+            
+            print(f"[DEDUP] Processing NEW command: {cmd.get('command')} (msg_id={msg_id})")
+            
+            # Mark as processed
+            if msg_id:
+                self._processed_commands.add(msg_id)
+            if msg_hash:
+                self._processed_commands.add(msg_hash)
+            
             self._log_dashboard("command_recv", {
                 "from": cmd.get("from", "unknown"),
                 "command": cmd.get("command", ""),
-                "msg_id": cmd.get("msg_id", ""),
+                "msg_id": msg_id,
             })
             
             # Execute command
             self._execute_command(cmd)
+            
+            # Persist processed commands
+            self._save_processed_commands()
+            
+            # Add to processed list
+            processed.append(cmd)
         
-        return commands
+        return processed
 
     def _execute_command(self, cmd: dict) -> None:
         """Execute a command from the dashboard.
@@ -1748,3 +1776,22 @@ class ClakuNode:
             "no_votes": no_votes,
             "total_votes": total_votes
         }
+
+    def _load_processed_commands(self) -> set[str]:
+        """Load processed command IDs from disk."""
+        cmd_file = CLAKU_DIR / "processed_commands.json"
+        if cmd_file.exists():
+            import json
+            with open(cmd_file, 'r') as f:
+                data = json.load(f)
+                print(f"[INIT] Loaded {len(data)} processed commands from disk")
+                return set(data)
+        print("[INIT] No processed commands file, starting fresh")
+        return set()
+    
+    def _save_processed_commands(self) -> None:
+        """Save processed command IDs to disk."""
+        cmd_file = CLAKU_DIR / "processed_commands.json"
+        import json
+        with open(cmd_file, 'w') as f:
+            json.dump(list(self._processed_commands), f)
