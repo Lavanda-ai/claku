@@ -1471,72 +1471,70 @@ button:active {
 
 /* Settings */
 .settings-container {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 20px;
+  max-width: 700px;
 }
 
 .settings-section {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
-  padding: 20px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .settings-section h3 {
-  margin-top: 0;
-  margin-bottom: 15px;
-  color: #a78bfa;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #666;
+  margin-bottom: 12px;
 }
 
 .setting-item {
   display: flex;
   align-items: center;
-  margin-bottom: 15px;
-  gap: 10px;
+  padding: 8px 0;
+  gap: 12px;
 }
 
 .setting-item label {
-  min-width: 150px;
-  color: #e5e7eb;
+  flex: 1;
+  font-size: 14px;
+  color: #ccc;
 }
 
 .setting-item input[type="checkbox"] {
-  width: 20px;
-  height: 20px;
-  cursor: pointer;
+  width: 18px;
+  height: 18px;
 }
 
 .setting-item input[type="number"],
 .setting-item input[type="range"],
 .setting-item select {
-  flex: 1;
-  padding: 8px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(167, 139, 250, 0.3);
+  padding: 6px 10px;
+  background: #1a1a1a;
+  border: 1px solid #333;
   border-radius: 4px;
-  color: #e5e7eb;
-  font-size: 14px;
+  color: #ccc;
+  font-size: 13px;
 }
 
-.setting-item input[type="range"] {
-  cursor: pointer;
+.setting-item input[type="number"] {
+  width: 80px;
+}
+
+.setting-item select {
+  width: 180px;
 }
 
 #save-settings-btn {
-  width: 100%;
-  padding: 12px;
-  background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
-  border: none;
-  border-radius: 8px;
-  color: white;
-  font-size: 16px;
-  font-weight: 600;
+  margin-top: 20px;
+  padding: 10px 20px;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #ccc;
+  font-size: 14px;
   cursor: pointer;
-  transition: all 0.3s ease;
 }
 
 #save-settings-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(167, 139, 250, 0.4);
+  background: #333;
+  border-color: #555;
 }
