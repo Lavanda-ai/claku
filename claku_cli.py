@@ -539,12 +539,15 @@ def cmd_circle_create(args: argparse.Namespace) -> None:
     node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
     try:
         tags = args.tags.split(',') if args.tags else []
-        circle = node.circle_create(args.name, args.description or "", args.location or "", tags)
+        rules = args.rules or ""
+        circle = node.circle_create(args.name, args.description or "", args.location or "", tags, rules)
         print(f"✔ Circle '{args.name}' created")
         print(f"  Creator: {identity['name']}")
         print(f"  Members: {len(circle['members'])}")
         if args.description:
             print(f"  Description: {args.description}")
+        if args.rules:
+            print(f"  Rules: {args.rules}")
     except ValueError as e:
         print(f"✖ {e}")
         sys.exit(1)
@@ -554,6 +557,23 @@ def cmd_circle_join(args: argparse.Namespace) -> None:
     """Join an existing Circle."""
     identity = _require_identity()
     node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    
+    # Load circle to check rules
+    from pathlib import Path
+    circles_file = Path.home() / ".claku" / "circles" / "membership.json"
+    if circles_file.exists():
+        import json
+        with open(circles_file, 'r') as f:
+            circles = json.load(f)
+        
+        circle = circles.get(args.name)
+        if circle and circle.get("rules"):
+            if not args.accept_rules:
+                print(f"\n⚠️  Circle Rules:\n{circle['rules']}\n")
+                print("You must accept the rules to join.")
+                print(f"Use: claku circle-join {args.name} --accept-rules")
+                sys.exit(1)
+    
     ok = node.circle_join(args.name)
     if ok:
         print(f"✔ Joined circle '{args.name}'")
@@ -911,6 +931,7 @@ def main() -> None:
     p_cc.add_argument("--description", default="", help="Circle description")
     p_cc.add_argument("--location", help="Geographic location")
     p_cc.add_argument("--tags", help="Tags (comma-separated)")
+    p_cc.add_argument("--rules", help="Circle rules (agents must accept)")
 
     # circle-join
     p_cj = sub.add_parser("circle-join", help="Join a Circle")

@@ -916,7 +916,7 @@ class ClakuNode:
 
     # ── Circles ────────────────────────────────────────────────────────────
 
-    def circle_create(self, name: str, description: str = "", location: str = "", tags: list[str] = None) -> dict:
+    def circle_create(self, name: str, description: str = "", location: str = "", tags: list[str] = None, rules: str = "") -> dict:
         """Create a new Circle (governance structure).
 
         Args:
@@ -941,11 +941,13 @@ class ClakuNode:
             "created_at": int(time.time()),
             "location": location,
             "tags": tags or [],
+            "rules": rules,
             "members": [
                 {
                     "name": self.identity["name"],
                     "pubkey": self.identity["pubkey"],
                     "joined_at": int(time.time()),
+                    "accepted_rules": True
                 }
             ],
         }
