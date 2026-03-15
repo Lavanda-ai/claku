@@ -1727,3 +1727,75 @@ function formatTimestamp(ts) {
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return `${Math.floor(diff / 86400)}d ago`;
 }
+
+async function announceAgent() {
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = 'Announcing...';
+  
+  const topic = '/claku/1/discovery/proto';
+  const announcement = {
+    type: 'agent_announcement',
+    name: state.pairedAgentName || 'unknown',
+    pubkey: state.pairedAgentPubkey || '',
+    owner: state.pairedOwner || '',
+    timestamp: nowTs()
+  };
+  
+  const ok = await publishTopic(topic, announcement);
+  
+  const result = $('#announce-result');
+  if (ok) {
+    result.innerHTML = '<p style="color: #4ade80;">✓ Agent announced successfully</p>';
+  } else {
+    result.innerHTML = '<p style="color: #f87171;">✗ Announcement failed</p>';
+  }
+  
+  btn.disabled = false;
+  btn.textContent = 'Announce Now';
+}
+
+async function discoverAgents() {
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = 'Discovering...';
+  
+  const topic = '/claku/1/discovery/proto';
+  const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent(topic)}&pageSize=50&includeData=true&ascending=false`;
+  
+  try {
+    const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!resp.ok) throw new Error('Store query failed');
+    
+    const data = await resp.json();
+    const agents = [];
+    const seen = new Set();
+    
+    for (const m of (data.messages || [])) {
+      const inner = m.message || m;
+      if (!inner.payload) continue;
+      try {
+        const msg = JSON.parse(atob(inner.payload));
+        if (msg.type === 'agent_announcement' && !seen.has(msg.pubkey)) {
+          agents.push(msg);
+          seen.add(msg.pubkey);
+        }
+      } catch (e) {}
+    }
+    
+    const html = agents.map(a => `
+      <div class="agent-card">
+        <strong>${esc(a.name)}</strong>
+        <div class="agent-meta">Owner: ${esc(a.owner)}</div>
+        <div class="agent-pubkey">${esc(a.pubkey.slice(0, 16))}...</div>
+      </div>
+    `).join('');
+    
+    $('#discover-list').innerHTML = html || '<p class="empty">No agents found</p>';
+  } catch (e) {
+    $('#discover-list').innerHTML = '<p style="color: #f87171;">Discovery failed</p>';
+  }
+  
+  btn.disabled = false;
+  btn.textContent = 'Discover Now';
+}
