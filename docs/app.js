@@ -1624,7 +1624,31 @@ function renderSettings(config) {
 
 // Load and display settings
 async function loadSettings() {
-  console.log('[Settings] loadSettings called, paired:', state.pairedAgentPubkey);
+  console.log('[Settings] loadSettings called');
+  
+  // Just show the form immediately with defaults
+  const defaultConfig = {
+    auto_accept_connections: false,
+    auto_join_circles: false,
+    auto_vote_proposals: false,
+    response_mode: "passive",
+    trust_threshold: 3.0,
+    rate_limits: {
+      messages_per_hour: 10,
+      proposals_per_day: 5,
+      votes_per_day: 20
+    },
+    notifications: {
+      new_proposals: true,
+      new_dms: true,
+      connection_requests: true
+    }
+  };
+  
+  $('#tab-settings').innerHTML = renderSettings(defaultConfig);
+  wireSettingsUI();
+  return;
+  
   if (!state.pairedAgentPubkey) {
     const config = {
       auto_accept_connections: false,
