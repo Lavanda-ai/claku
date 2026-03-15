@@ -1853,3 +1853,105 @@ class ClakuNode:
         topic = f"/claku/1/circle/{circle_name}/proto"
         messages = self.transport.store_query_json([topic], page_size=limit)
         return [m for m in messages if m.get("type") == "circle_message"]
+
+    def circle_approve_proposal(self, circle_name: str, proposal_id: str) -> bool:
+        """Approve a proposal (creator only)."""
+        circles_file = CLAKU_DIR / "circles" / "membership.json"
+        proposals_file = CLAKU_DIR / "circles" / "proposals.json"
+        
+        if not circles_file.exists() or not proposals_file.exists():
+            print("✖ Circles or proposals not found")
+            return False
+        
+        import json
+        with open(circles_file, 'r') as f:
+            circles = json.load(f)
+        
+        circle = circles.get(circle_name)
+        if not circle:
+            print(f"✖ Circle '{circle_name}' not found")
+            return False
+        
+        # Check if we're the creator
+        if circle["created_by"] != self.identity["name"]:
+            print(f"✖ Only circle creator can approve proposals")
+            return False
+        
+        # Load and update proposal
+        with open(proposals_file, 'r') as f:
+            proposals = json.load(f)
+        
+        if proposal_id not in proposals:
+            print(f"✖ Proposal '{proposal_id}' not found")
+            return False
+        
+        proposal = proposals[proposal_id]
+        if proposal["circle"] != circle_name:
+            print(f"✖ Proposal not in this circle")
+            return False
+        
+        proposal["status"] = "approved"
+        proposal["approved_at"] = int(time.time())
+        proposal["approved_by"] = self.identity["name"]
+        
+        with open(proposals_file, 'w') as f:
+            json.dump(proposals, f, indent=2)
+        
+        print(f"✅ Approved proposal: {proposal['title']}")
+        
+        # Announce to circle
+        self.send_circle_message(circle_name, f"✅ Proposal approved: {proposal['title']}")
+        return True
+    
+    def circle_reject_proposal(self, circle_name: str, proposal_id: str, reason: str = "") -> bool:
+        """Reject a proposal (creator only)."""
+        circles_file = CLAKU_DIR / "circles" / "membership.json"
+        proposals_file = CLAKU_DIR / "circles" / "proposals.json"
+        
+        if not circles_file.exists() or not proposals_file.exists():
+            print("✖ Circles or proposals not found")
+            return False
+        
+        import json
+        with open(circles_file, 'r') as f:
+            circles = json.load(f)
+        
+        circle = circles.get(circle_name)
+        if not circle:
+            print(f"✖ Circle '{circle_name}' not found")
+            return False
+        
+        if circle["created_by"] != self.identity["name"]:
+            print(f"✖ Only circle creator can reject proposals")
+            return False
+        
+        with open(proposals_file, 'r') as f:
+            proposals = json.load(f)
+        
+        if proposal_id not in proposals:
+            print(f"✖ Proposal '{proposal_id}' not found")
+            return False
+        
+        proposal = proposals[proposal_id]
+        if proposal["circle"] != circle_name:
+            print(f"✖ Proposal not in this circle")
+            return False
+        
+        proposal["status"] = "rejected"
+        proposal["rejected_at"] = int(time.time())
+        proposal["rejected_by"] = self.identity["name"]
+        proposal["rejection_reason"] = reason
+        
+        with open(proposals_file, 'w') as f:
+            json.dump(proposals, f, indent=2)
+        
+        print(f"❌ Rejected proposal: {proposal['title']}")
+        if reason:
+            print(f"   Reason: {reason}")
+        
+        # Announce to circle
+        msg = f"❌ Proposal rejected: {proposal['title']}"
+        if reason:
+            msg += f" (Reason: {reason})"
+        self.send_circle_message(circle_name, msg)
+        return True

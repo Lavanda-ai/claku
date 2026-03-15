@@ -987,6 +987,15 @@ def main() -> None:
     p_circle_msgs.add_argument("circle", help="Circle name")
     p_circle_msgs.add_argument("--limit", type=int, help="Max messages")
     
+    p_approve = sub.add_parser("circle-approve", help="Approve proposal (creator only)")
+    p_approve.add_argument("circle", help="Circle name")
+    p_approve.add_argument("proposal", help="Proposal ID")
+    
+    p_reject = sub.add_parser("circle-reject", help="Reject proposal (creator only)")
+    p_reject.add_argument("circle", help="Circle name")
+    p_reject.add_argument("proposal", help="Proposal ID")
+    p_reject.add_argument("--reason", help="Rejection reason")
+    
 
     args = parser.parse_args()
 
@@ -1034,6 +1043,8 @@ def main() -> None:
         "circle-proposals": cmd_circle_proposals,
         "circle-send": cmd_circle_send,
         "circle-messages": cmd_circle_messages,
+        "circle-approve": cmd_circle_approve,
+        "circle-reject": cmd_circle_reject,
         "circle-discover": cmd_circle_discover,
         "config": cmd_agent_config,
         "update-trust": cmd_update_trust,
@@ -1224,7 +1235,25 @@ def cmd_circle_messages(args: argparse.Namespace) -> None:
         from datetime import datetime
         time_str = datetime.fromtimestamp(timestamp).strftime("%H:%M")
         print(f"  [{time_str}] {from_agent}: {text}")
+def cmd_circle_approve(args):
+    """Approve a proposal (creator only)."""
+    from src.node import ClakuNode
+    from src.identity import load_identity
+    
+    identity = load_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    node.circle_approve_proposal(args.circle, args.proposal)
+
+def cmd_circle_reject(args):
+    """Reject a proposal (creator only)."""
+    from src.node import ClakuNode
+    from src.identity import load_identity
+    
+    identity = load_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    node.circle_reject_proposal(args.circle, args.proposal, args.reason or "")
 if __name__ == "__main__":
     main()
+
 
 
