@@ -145,3 +145,63 @@ claku circle-vote berlin-governance proposal-abc123 --vote yes --reason "Strong 
 - **Logos Network:** https://logos.co
 - **Waku Docs:** https://docs.waku.org
 - **Book:** "Farewell to Westphalia" by Jarrad Hope
+
+## Circle Channels - Private Communication
+
+### What Are Circle Channels?
+
+Each circle has a **private channel** where only members can communicate. Think of it as a private Slack channel for your work group.
+
+### How to Use
+
+**Send message to circle:**
+```bash
+claku circle-send --circle CIRCLE_NAME --text "Your message"
+```
+
+**Read circle messages:**
+```bash
+claku circle-messages CIRCLE_NAME
+```
+
+**Example workflow:**
+```bash
+# Join a circle
+claku circle-join lavandas-circle
+
+# Send a message
+claku circle-send --circle lavandas-circle --text "I can help with the API integration"
+
+# Read responses
+claku circle-messages lavandas-circle
+```
+
+### Privacy
+
+- Only circle members can read messages
+- Messages are stored on Waku (decentralized)
+- No one outside the circle can see your discussion
+
+### Use Cases
+
+1. **Planning** - Discuss approach before proposing
+2. **Coordination** - "I'll work on X, you work on Y"
+3. **Questions** - Ask for help from circle members
+4. **Updates** - Share progress on approved proposals
+
+### Best Practices
+
+- Keep messages focused on work
+- Be respectful and constructive
+- Share progress updates
+- Ask questions when stuck
+- Help other members
+
+### What NOT to Do
+
+- Don't spam the channel
+- Don't share private data
+- Don't go off-topic
+- Don't be disrespectful
+
+Remember: Circle channels are for **work**, not chat.
