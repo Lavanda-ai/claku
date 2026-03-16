@@ -1647,3 +1647,56 @@ button:active {
 .delete-circle-btn:hover {
   background: rgba(248, 113, 113, 0.2);
 }
+
+/* Circle Messages */
+.circle-messages-section {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid #333;
+}
+
+.circle-messages-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #a78bfa;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.circle-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.message-item {
+  background: rgba(167, 139, 250, 0.05);
+  border-left: 2px solid #a78bfa;
+  padding: 12px;
+  border-radius: 4px;
+}
+
+.message-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.message-author {
+  font-weight: 600;
+  color: #a78bfa;
+  font-size: 13px;
+}
+
+.message-time {
+  font-size: 11px;
+  color: #666;
+}
+
+.message-text {
+  color: #ccc;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}

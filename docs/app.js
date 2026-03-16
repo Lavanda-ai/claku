@@ -333,7 +333,12 @@ async function openCircle(name) {
   const proposals = await loadCircleProposals(name);
   circle.proposals = proposals;
   
+  // Load messages from Waku
+  const messages = await loadCircleMessages(name);
+  circle.messages = messages;
+  
   renderProposals();
+  renderCircleMessages();
   subscribeCircle(name);
 }
 
@@ -367,6 +372,26 @@ function closeCircle() {
   dom.circleView.classList.add('hidden');
   dom.proposalCreateForm.classList.add('hidden');
   dom.circleList.classList.remove('hidden');
+}
+
+function renderCircleMessages() {
+  const circle = state.circles.get(state.currentCircle);
+  if (!circle || !circle.messages || !circle.messages.length) {
+    dom.circleMessages.innerHTML = '<div class="empty-state">no messages yet</div>';
+    return;
+  }
+  
+  dom.circleMessages.innerHTML = circle.messages.map(m => {
+    const time = fmtTime(m.ts);
+    return `
+      <div class="message-item">
+        <div class="message-header">
+          <span class="message-author">${esc(m.from)}</span>
+          <span class="message-time">${time}</span>
+        </div>
+        <div class="message-text">${esc(m.text)}</div>
+      </div>`;
+  }).join('');
 }
 
 function renderProposals() {
@@ -1216,6 +1241,7 @@ async function init() {
     circleViewName: $('#circle-view-name'),
     circleViewMembers: $('#circle-view-members'),
     circleViewDesc: $('#circle-view-desc'),
+    circleMessages: $('#circle-messages'),
     proposalList: $('#proposal-list'),
     createCircleBtn: $('#create-circle-btn'),
     circleCreateForm: $('#circle-create-form'),

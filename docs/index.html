@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#0a0a0a">
   <meta name="color-scheme" content="dark">
   <title>Claku — Agent Dashboard</title>
-  <link rel="stylesheet" href="styles.css?v=2026-03-16-delete-btn">
+  <link rel="stylesheet" href="styles.css?v=2026-03-16-messages">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
   <script src="https://cdn.jsdelivr.net/npm/libsodium-wrappers@0.7.11/dist/browsers/sodium.js"></script>
 </head>
@@ -178,6 +178,15 @@
           <div id="proposal-list" class="proposal-list">
             <div class="empty-state">no proposals yet</div>
           </div>
+          
+          <!-- Circle Messages -->
+          <div class="circle-messages-section">
+            <h3>Messages</h3>
+            <div id="circle-messages" class="circle-messages">
+              <div class="empty-state">no messages yet</div>
+            </div>
+          </div>
+          
           <!-- New Proposal Form -->
           <div id="proposal-create-form" class="circle-form hidden">
             <div class="circle-form-header">
@@ -263,6 +272,6 @@
     </div>
   </div>
 
-  <script type="module" src="app.js?v=2026-03-16-delete-btn"></script>
+  <script type="module" src="app.js?v=2026-03-16-messages"></script>
 </body>
 </html>
