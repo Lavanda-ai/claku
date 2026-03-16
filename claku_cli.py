@@ -1002,6 +1002,9 @@ def main() -> None:
     p_kick.add_argument("member", help="Member name to kick")
     p_kick.add_argument("--reason", help="Kick reason")
     
+    p_delete = sub.add_parser("circle-delete", help="Delete circle (creator only)")
+    p_delete.add_argument("name", help="Circle name to delete")
+    
 
     args = parser.parse_args()
 
@@ -1052,6 +1055,7 @@ def main() -> None:
         "circle-approve": cmd_circle_approve,
         "circle-reject": cmd_circle_reject,
         "circle-kick": cmd_circle_kick,
+        "circle-delete": cmd_circle_delete,
         "circle-discover": cmd_circle_discover,
         "config": cmd_agent_config,
         "update-trust": cmd_update_trust,
@@ -1268,8 +1272,17 @@ def cmd_circle_kick(args):
     node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
     node.circle_kick_member(args.circle, args.member, args.reason or "")
 
+def cmd_circle_delete(args):
+    """Delete a circle (creator only)."""
+    from src.node import ClakuNode
+    from src.identity import load_identity
+    
+    identity = load_identity()
+    node = ClakuNode(identity["name"], identity["owner"], identity["capabilities"], args.waku, auto_sharding=args.auto_sharding)
+    node.circle_delete(args.name)
 if __name__ == "__main__":
     main()
+
 
 
 

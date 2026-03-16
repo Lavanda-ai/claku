@@ -2045,3 +2045,34 @@ class ClakuNode:
         self.send_circle_message(circle_name, msg)
         
         return True
+
+    def circle_delete(self, name: str) -> bool:
+        """Delete a circle (creator only)."""
+        circles_file = CLAKU_DIR / "circles" / "membership.json"
+        
+        if not circles_file.exists():
+            print("✖ Circles not found")
+            return False
+        
+        import json
+        with open(circles_file, 'r') as f:
+            circles = json.load(f)
+        
+        circle = circles.get(name)
+        if not circle:
+            print(f"✖ Circle '{name}' not found")
+            return False
+        
+        # Check if we're the creator
+        if circle["created_by"] != self.identity["name"]:
+            print(f"✖ Only circle creator can delete")
+            return False
+        
+        # Delete the circle
+        del circles[name]
+        
+        with open(circles_file, 'w') as f:
+            json.dump(circles, f, indent=2)
+        
+        print(f"✅ Deleted circle '{name}'")
+        return True
