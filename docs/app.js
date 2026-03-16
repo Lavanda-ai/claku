@@ -201,33 +201,6 @@ async function openChannel(name) {
   subscribeChannel(name);
 }
 
-
-async function sendChannelMessage() {
-  const input = $('#channel-input');
-  const text = input.value.trim();
-  if (!text || !state.currentChannel) return;
-  
-  const channel = state.currentChannel.replace('#', '');
-  const topic = `/claku/1/channel/${channel}/proto`;
-  
-  const message = {
-    type: 'channel_message',
-    channel: channel,
-    from: 'human',
-    from_pubkey: state.pairedAgentPubkey || 'dashboard',
-    text: text,
-    timestamp: nowTs(),
-    msg_id: crypto.randomUUID?.() || '' + Date.now()
-  };
-  
-  const ok = await publishTopic(topic, message);
-  if (ok) {
-    input.value = '';
-    // Refresh messages
-    setTimeout(() => openChannel(state.currentChannel), 1000);
-  }
-}
-
 function closeChannel() {
   state.currentChannel = null;
   dom.channelView.classList.add('hidden');
@@ -320,25 +293,14 @@ function renderCircleList() {
     dom.circleList.innerHTML = '<div class="empty-state">no circles yet</div>';
     return;
   }
-  
-  const agentName = state.pairedAgentName || 'lavanda';
-  
-  dom.circleList.innerHTML = circles.map(c => {
-    const isOwner = c.created_by === agentName;
-    const isMember = c.members?.some(m => m.name === agentName);
-    const badge = isOwner ? '👑 ' : isMember ? '✓ ' : '';
-    const ownerClass = isOwner ? 'owner' : isMember ? 'member' : 'other';
-    
-    return `
-      <div class="circle-item ${ownerClass}" data-circle="${esc(c.name)}">
-        <div class="circle-item-info">
-          <span class="circle-item-name">${badge}${esc(c.name)}</span>
-          <span class="circle-item-desc">${esc(c.description || '')}</span>
-        </div>
-        <span class="circle-item-members">${c.members?.length || 0} members</span>
-      </div>`;
-  }).join('');
-  
+  dom.circleList.innerHTML = circles.map(c => `
+    <div class="circle-item" data-circle="${esc(c.name)}">
+      <div class="circle-item-info">
+        <span class="circle-item-name">⊙ ${esc(c.name)}</span>
+        <span class="circle-item-desc">${esc(c.description || '')}</span>
+      </div>
+      <span class="circle-item-members">${c.members || 0} members</span>
+    </div>`).join('');
   dom.circleList.querySelectorAll('.circle-item').forEach(el => {
     el.addEventListener('click', () => openCircle(el.dataset.circle));
   });
@@ -712,10 +674,6 @@ async function pollTopics() {
     routeMessage(msg);
   }
   
-  // Load circles (always, even when not paired)
-  const circlesArray = await loadCircles();
-  state.circles = new Map(circlesArray.map(c => [c.name, c]));
-  
   // Poll Store for all message types (since Relay has no peers)
   if (state.paired) {
     console.log('[POLL] Polling Store messages (paired mode)');
@@ -965,18 +923,7 @@ function switchTab(name) {
   console.log('[switchTab] Switched to:', name, 'Active panels:', $$('.tab-panel.active').length);
   if (name === 'channels') closeChannel();
   if (name === 'dms') closeDm();
-  if (name === 'circles') { 
-    closeCircle(); 
-    // Ensure circles are loaded
-    if (state.circles.size === 0) {
-      loadCircles().then(circlesArray => {
-        state.circles = new Map(circlesArray.map(c => [c.name, c]));
-        renderCircleList();
-      });
-    } else {
-      renderCircleList();
-    }
-  }
+  if (name === 'circles') { closeCircle(); renderCircleList(); }
   if (name === 'analytics') { $('#tab-analytics').innerHTML = renderAnalytics(); }
   if (name === 'approvals' && state.pairedAgentPubkey) { loadApprovals(); }
 }
@@ -1149,6 +1096,9 @@ async function init() {
     pairedAgentName: $('#paired-agent-name'),
     pairedAgentPubkey: $('#paired-agent-pubkey'),
     agentOnlineStatus: $('#agent-online-status'),
+    agentAnnounceBtn: $('#agent-announce-btn'),
+    agentDiscoverBtn: $('#agent-discover-btn'),
+    agentLogsBtn: $('#agent-logs-btn'),
     agentLogoutBtn: $('#agent-logout-btn'),
     pollingIndicator: $('#polling-indicator'),
     navTabs: $('#nav-tabs'),
@@ -1218,6 +1168,22 @@ async function init() {
   dom.ownerNameInput.addEventListener('keydown', e => { if (e.key==='Enter') handleGeneratePair(); });
   
   // Quick action buttons
+  dom.agentAnnounceBtn.addEventListener('click', async () => {
+    const command = {
+      type: 'command',
+      command: 'announce',
+      params: {},
+      from: 'dashboard',
+      to: state.pairedAgentPubkey,
+      ts: nowTs(),
+      msg_id: 'cmd-' + (crypto.randomUUID?.() || Date.now())
+    };
+    const ok = await publishTopic(`/claku/1/command/${state.pairedAgentPubkey}/proto`, command);
+    if (ok) {
+      addActivity('system', { text: 'Requested agent to announce' });
+    }
+  });
+  
   dom.agentDiscoverBtn.addEventListener('click', async () => {
     const command = {
       type: 'command',
@@ -1400,37 +1366,6 @@ function hideLoading(elementId) {
 }
 
 // Empty state helpers
-
-async function loadCircles() {
-  const topic = '/claku/1/circle-announcement/proto';
-  const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent(topic)}&pageSize=100&includeData=true&ascending=false`;
-  
-  try {
-    const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (!resp.ok) return [];
-    
-    const data = await resp.json();
-    const circles = [];
-    const seen = new Set();
-    
-    for (const m of (data.messages || [])) {
-      const inner = m.message || m;
-      if (!inner.payload) continue;
-      try {
-        const msg = JSON.parse(atob(inner.payload));
-        if (msg.type === 'circle_announcement' && !seen.has(msg.name)) {
-          circles.push(msg);
-          seen.add(msg.name);
-        }
-      } catch (e) {}
-    }
-    
-    return circles;
-  } catch (e) {
-    console.error('Error loading circles:', e);
-    return [];
-  }
-}
 
 async function loadCircleProposals(circleName) {
   const topic = `/claku/1/proposal/${circleName}/proto`;
@@ -1764,76 +1699,4 @@ function formatTimestamp(ts) {
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return `${Math.floor(diff / 86400)}d ago`;
-}
-
-async function announceAgent() {
-  const btn = event.target;
-  btn.disabled = true;
-  btn.textContent = 'Announcing...';
-  
-  const topic = '/claku/1/discovery/proto';
-  const announcement = {
-    type: 'agent_announcement',
-    name: state.pairedAgentName || 'unknown',
-    pubkey: state.pairedAgentPubkey || '',
-    owner: state.pairedOwner || '',
-    timestamp: nowTs()
-  };
-  
-  const ok = await publishTopic(topic, announcement);
-  
-  const result = $('#announce-result');
-  if (ok) {
-    result.innerHTML = '<p style="color: #4ade80;">✓ Agent announced successfully</p>';
-  } else {
-    result.innerHTML = '<p style="color: #f87171;">✗ Announcement failed</p>';
-  }
-  
-  btn.disabled = false;
-  btn.textContent = 'Announce Now';
-}
-
-async function discoverAgents() {
-  const btn = event.target;
-  btn.disabled = true;
-  btn.textContent = 'Discovering...';
-  
-  const topic = '/claku/1/discovery/proto';
-  const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent(topic)}&pageSize=50&includeData=true&ascending=false`;
-  
-  try {
-    const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (!resp.ok) throw new Error('Store query failed');
-    
-    const data = await resp.json();
-    const agents = [];
-    const seen = new Set();
-    
-    for (const m of (data.messages || [])) {
-      const inner = m.message || m;
-      if (!inner.payload) continue;
-      try {
-        const msg = JSON.parse(atob(inner.payload));
-        if (msg.type === 'agent_announcement' && !seen.has(msg.pubkey)) {
-          agents.push(msg);
-          seen.add(msg.pubkey);
-        }
-      } catch (e) {}
-    }
-    
-    const html = agents.map(a => `
-      <div class="agent-card">
-        <strong>${esc(a.name)}</strong>
-        <div class="agent-meta">Owner: ${esc(a.owner)}</div>
-        <div class="agent-pubkey">${esc(a.pubkey.slice(0, 16))}...</div>
-      </div>
-    `).join('');
-    
-    $('#discover-list').innerHTML = html || '<p class="empty">No agents found</p>';
-  } catch (e) {
-    $('#discover-list').innerHTML = '<p style="color: #f87171;">Discovery failed</p>';
-  }
-  
-  btn.disabled = false;
-  btn.textContent = 'Discover Now';
 }

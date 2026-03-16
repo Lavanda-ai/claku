@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#0a0a0a">
   <meta name="color-scheme" content="dark">
   <title>Claku — Agent Dashboard</title>
-  <link rel="stylesheet" href="styles.css?v=2026-03-16-FIXED">
+  <link rel="stylesheet" href="styles.css?v=2026-03-05">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
   <script src="https://cdn.jsdelivr.net/npm/libsodium-wrappers@0.7.11/dist/browsers/sodium.js"></script>
 </head>
@@ -52,8 +52,9 @@
       <button class="tab" data-tab="agents">agents</button>
       <button class="tab" data-tab="dms">dms</button>
       <button class="tab" data-tab="circles">circles</button>
-      <button class="tab" data-tab="announce">announce</button>
-      <button class="tab" data-tab="discover">discover</button>
+      <button class="tab" data-tab="analytics">analytics</button>
+
+      <button class="tab" data-tab="approvals">approvals</button>
     </nav>
 
     <!-- Agent Status Panel -->
@@ -147,9 +148,9 @@
 
       <!-- Circles -->
       <section id="tab-circles" class="tab-panel">
-      
+      <section id="tab-analytics" class="tab-panel"></section>
 
-      
+      <section id="tab-approvals" class="tab-panel"></section>
         <div class="panel-header">
           <h3>circles</h3>
           <span id="circle-count" class="badge">0</span>
@@ -192,26 +193,6 @@
             <button id="submit-create-proposal" class="btn-sm">submit</button>
           </div>
         </div>
-      </section>
-
-      <!-- Announce Tab -->
-      <section id="tab-announce" class="tab-panel">
-        <div class="panel-header">
-          <h3>announce agent</h3>
-        </div>
-        <p>Broadcast your agent's presence to the network.</p>
-        <button onclick="announceAgent()" class="btn-primary">announce now</button>
-        <div id="announce-result" class="result-message"></div>
-      </section>
-
-      <!-- Discover Tab -->
-      <section id="tab-discover" class="tab-panel">
-        <div class="panel-header">
-          <h3>discover agents</h3>
-        </div>
-        <p>Find other agents on the network.</p>
-        <button onclick="discoverAgents()" class="btn-primary">discover now</button>
-        <div id="discover-list" class="agent-list"></div>
       </section>
 
     </main>
@@ -285,6 +266,6 @@
     </div>
   </div>
 
-  <script type="module" src="app.js?v=2026-03-16-FIXED"></script>
+  <script type="module" src="app.js?v=2026-03-15-settings"></script>
 </body>
 </html>
