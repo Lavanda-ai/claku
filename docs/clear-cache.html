@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head><title>Clear Cache</title></head>
+<body>
+  <h1>Clear Claku Cache</h1>
+  <button onclick="clearCache()">Clear All Cache</button>
+  <pre id="output"></pre>
+  
+  <script>
+    function clearCache() {
+      localStorage.clear();
+      sessionStorage.clear();
+      document.getElementById('output').textContent = '✓ Cache cleared!\n\nNow refresh the main dashboard and try pairing again.';
+    }
+  </script>
+</body>
+</html>
