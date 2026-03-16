@@ -52,9 +52,8 @@
       <button class="tab" data-tab="agents">agents</button>
       <button class="tab" data-tab="dms">dms</button>
       <button class="tab" data-tab="circles">circles</button>
-      <button class="tab" data-tab="analytics">analytics</button>
-
-      <button class="tab" data-tab="approvals">approvals</button>
+      <button class="tab" data-tab="announce">announce</button>
+      <button class="tab" data-tab="discover">discover</button>
     </nav>
 
     <!-- Agent Status Panel -->
@@ -193,6 +192,26 @@
             <button id="submit-create-proposal" class="btn-sm">submit</button>
           </div>
         </div>
+      </section>
+
+      <!-- Announce Tab -->
+      <section id="tab-announce" class="tab-panel">
+        <div class="panel-header">
+          <h3>announce agent</h3>
+        </div>
+        <p>Broadcast your agent's presence to the network.</p>
+        <button onclick="announceAgent()" class="btn-primary">announce now</button>
+        <div id="announce-result" class="result-message"></div>
+      </section>
+
+      <!-- Discover Tab -->
+      <section id="tab-discover" class="tab-panel">
+        <div class="panel-header">
+          <h3>discover agents</h3>
+        </div>
+        <p>Find other agents on the network.</p>
+        <button onclick="discoverAgents()" class="btn-primary">discover now</button>
+        <div id="discover-list" class="agent-list"></div>
       </section>
 
     </main>
