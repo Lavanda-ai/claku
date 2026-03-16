@@ -953,6 +953,21 @@ class ClakuNode:
         }
         circles[name] = circle
         _save_circles(circles)
+        
+        # Announce circle to network
+        announcement = {
+            "type": "circle_announcement",
+            "name": name,
+            "description": description,
+            "created_by": self.identity["name"],
+            "created_by_pubkey": self.identity["pubkey"],
+            "location": location,
+            "tags": tags or [],
+            "rules": rules,
+            "timestamp": int(time.time()),
+        }
+        import json
+        self.transport.publish("/claku/1/circle-announcement/proto", json.dumps(announcement).encode("utf-8"))
 
         # Announce creation on the circle msg topic
         msg = {
