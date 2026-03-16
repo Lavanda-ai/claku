@@ -1149,9 +1149,6 @@ async function init() {
     pairedAgentName: $('#paired-agent-name'),
     pairedAgentPubkey: $('#paired-agent-pubkey'),
     agentOnlineStatus: $('#agent-online-status'),
-    agentAnnounceBtn: $('#agent-announce-btn'),
-    agentDiscoverBtn: $('#agent-discover-btn'),
-    agentLogsBtn: $('#agent-logs-btn'),
     agentLogoutBtn: $('#agent-logout-btn'),
     pollingIndicator: $('#polling-indicator'),
     navTabs: $('#nav-tabs'),
@@ -1221,22 +1218,6 @@ async function init() {
   dom.ownerNameInput.addEventListener('keydown', e => { if (e.key==='Enter') handleGeneratePair(); });
   
   // Quick action buttons
-  dom.agentAnnounceBtn.addEventListener('click', async () => {
-    const command = {
-      type: 'command',
-      command: 'announce',
-      params: {},
-      from: 'dashboard',
-      to: state.pairedAgentPubkey,
-      ts: nowTs(),
-      msg_id: 'cmd-' + (crypto.randomUUID?.() || Date.now())
-    };
-    const ok = await publishTopic(`/claku/1/command/${state.pairedAgentPubkey}/proto`, command);
-    if (ok) {
-      addActivity('system', { text: 'Requested agent to announce' });
-    }
-  });
-  
   dom.agentDiscoverBtn.addEventListener('click', async () => {
     const command = {
       type: 'command',

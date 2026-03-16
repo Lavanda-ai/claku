@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head><title>Route Test</title></head>
+<body>
+  <h1>Test routeMessage</h1>
+  <button onclick="testRoute()">Test Pairing Accept</button>
+  <pre id="output" style="background:#000;color:#0f0;padding:20px;"></pre>
+  
+  <script>
+    const state = {
+      currentPairingCode: '666258',
+      paired: false,
+      pairedAgentPubkey: null,
+      pairedAgentName: null
+    };
+    
+    function testRoute() {
+      const out = document.getElementById('output');
+      out.textContent = 'Testing routeMessage...\n\n';
+      
+      const msg = {
+        "type": "pairing_accept",
+        "pairing_code": "666258",
+        "agent_name": "lavanda",
+        "agent_pubkey": "75582ae8bf3d14e66cf1d2ce4c7c477c4324052cb1212074cee826362edf99b8",
+        "owner_name": "opde",
+        "ts": 1773680198,
+        "msg_id": "pairing-1773680198-666258"
+      };
+      
+      out.textContent += 'Message:\n' + JSON.stringify(msg, null, 2) + '\n\n';
+      
+      // Simulate routeMessage
+      out.textContent += 'Checking conditions:\n';
+      out.textContent += `  msg.type === 'pairing_accept': ${msg.type === 'pairing_accept'}\n`;
+      out.textContent += `  msg.pairing_code === state.currentPairingCode: ${msg.pairing_code === state.currentPairingCode}\n`;
+      out.textContent += `  Should call handlePairingSuccess: ${msg.type === 'pairing_accept' && msg.pairing_code === state.currentPairingCode}\n\n`;
+      
+      if (msg.type === 'pairing_accept' && msg.pairing_code === state.currentPairingCode) {
+        out.textContent += 'Calling handlePairingSuccess...\n';
+        
+        // Simulate handlePairingSuccess
+        state.paired = true;
+        state.pairedAgentPubkey = msg.agent_pubkey;
+        state.pairedAgentName = msg.agent_name;
+        
+        out.textContent += `\n✓ SUCCESS!\n`;
+        out.textContent += `  state.paired: ${state.paired}\n`;
+        out.textContent += `  state.pairedAgentName: ${state.pairedAgentName}\n`;
+        out.textContent += `  state.pairedAgentPubkey: ${state.pairedAgentPubkey.slice(0,16)}...\n`;
+      } else {
+        out.textContent += '✗ FAILED - conditions not met\n';
+      }
+    }
+  </script>
+</body>
+</html>
