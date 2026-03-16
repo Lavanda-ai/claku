@@ -574,7 +574,7 @@ def cmd_circle_join(args: argparse.Namespace) -> None:
                 print(f"Use: claku circle-join {args.name} --accept-rules")
                 sys.exit(1)
     
-    ok = node.circle_join(args.name, accepted_rules=args.accept_rules)
+    ok = node.circle_join(args.name)
     if ok:
         print(f"✔ Joined circle '{args.name}'")
     else:
