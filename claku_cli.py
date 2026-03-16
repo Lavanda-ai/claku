@@ -224,6 +224,17 @@ def cmd_run(args: argparse.Namespace) -> None:
                         print(f"    [PAIR] Auto-accepted code {pair.get('pairing_code', '?')} from {pair.get('owner_name', '?')}")
                     for cmd in commands[:3]:
                         print(f"    [CMD] {cmd.get('command', '?')} from {cmd.get('from', '?')}")
+                    
+                    # Execute commands
+                    for cmd in commands:
+                        cmd_name = cmd.get('command')
+                        params = cmd.get('params', {})
+                        
+                        if cmd_name == 'circle-delete':
+                            circle_name = params.get('name')
+                            if circle_name:
+                                print(f"      → Executing: delete circle '{circle_name}'")
+                                node.circle_delete(circle_name)
                     for dm in dms[:3]:
                         print(f"    [DM] {dm.get('from', '?')}: {dm.get('text', '')[:60]}")
                 else:
