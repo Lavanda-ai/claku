@@ -300,9 +300,11 @@ function renderCircleList() {
     const isOwner = c.created_by === agentName;
     const isMember = c.members?.some(m => m.name === agentName);
     const ownerClass = isOwner ? 'owner' : isMember ? 'member' : 'other';
+    const deleteBtn = isOwner ? `<button class="delete-circle-btn" onclick="deleteCircle('${esc(c.name)}'); event.stopPropagation();">×</button>` : '';
     
     return `
       <div class="circle-item ${ownerClass}" data-circle="${esc(c.name)}">
+        ${deleteBtn}
         <div class="circle-item-info">
           <span class="circle-item-name">${esc(c.name)}</span>
           <span class="circle-item-desc">${esc(c.description || '')}</span>
@@ -333,6 +335,31 @@ async function openCircle(name) {
   
   renderProposals();
   subscribeCircle(name);
+}
+
+async function deleteCircle(name) {
+  if (!confirm(`Delete circle "${name}"? This cannot be undone.`)) {
+    return;
+  }
+  
+  // Send delete command to agent
+  const command = {
+    type: 'command',
+    command: 'circle-delete',
+    params: { name: name },
+    from: 'dashboard',
+    to: state.pairedAgentPubkey,
+    ts: nowTs(),
+    msg_id: 'cmd-' + (crypto.randomUUID?.() || Date.now())
+  };
+  
+  const ok = await publishTopic(`/claku/1/command/${state.pairedAgentPubkey}/proto`, command);
+  if (ok) {
+    addActivity('system', { text: `Requested deletion of circle "${name}"` });
+    // Remove from local state
+    state.circles.delete(name);
+    renderCircleList();
+  }
 }
 
 function closeCircle() {
