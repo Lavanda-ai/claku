@@ -661,10 +661,51 @@ async function relayPoll() {
   }
 }
 
+async function loadCircles() {
+  const topic = '/claku/1/circle-announcement/proto';
+  const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent(topic)}&pageSize=100&includeData=true&ascending=false`;
+  
+  try {
+    const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!resp.ok) return [];
+    
+    const data = await resp.json();
+    const circles = [];
+    const seen = new Set();
+    
+    for (const m of (data.messages || [])) {
+      const inner = m.message || m;
+      if (!inner.payload) continue;
+      try {
+        const payload_bytes = inner.payload;
+        let payload;
+        if (typeof payload_bytes === 'string') {
+          payload = atob(payload_bytes);
+        } else {
+          continue;
+        }
+        const msg = JSON.parse(payload);
+        if (msg.type === 'circle_announcement' && !seen.has(msg.name)) {
+          circles.push(msg);
+          seen.add(msg.name);
+        }
+      } catch (e) {}
+    }
+    
+    return circles;
+  } catch (e) {
+    return [];
+  }
+}
+
 async function pollTopics() {
   dom.pollingIndicator?.classList.add('active');
   
   console.log('[POLL] Starting poll cycle. state.paired:', state.paired, 'state.currentPairingCode:', state.currentPairingCode);
+  
+  // Load circles (always, even when not paired)
+  const circlesArray = await loadCircles();
+  state.circles = new Map(circlesArray.map(c => [c.name, c]));
   
   const msgs = await relayPoll();
   for (const msg of msgs) {
