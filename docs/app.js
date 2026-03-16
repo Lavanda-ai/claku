@@ -712,6 +712,10 @@ async function pollTopics() {
     routeMessage(msg);
   }
   
+  // Load circles (always, even when not paired)
+  const circlesArray = await loadCircles();
+  state.circles = new Map(circlesArray.map(c => [c.name, c]));
+  
   // Poll Store for all message types (since Relay has no peers)
   if (state.paired) {
     console.log('[POLL] Polling Store messages (paired mode)');
@@ -737,11 +741,6 @@ async function pollTopics() {
 }
 
 async function pollStoreMessages() {
-  // Load circles first
-  const circlesArray = await loadCircles();
-  state.circles = new Map(circlesArray.map(c => [c.name, c]));
-  renderCircleList();
-  
   // Poll discovery, channels, circles, and DMs from Store
   const topics = [
     '/claku/1/discovery/proto',
@@ -966,7 +965,18 @@ function switchTab(name) {
   console.log('[switchTab] Switched to:', name, 'Active panels:', $$('.tab-panel.active').length);
   if (name === 'channels') closeChannel();
   if (name === 'dms') closeDm();
-  if (name === 'circles') { closeCircle(); renderCircleList(); }
+  if (name === 'circles') { 
+    closeCircle(); 
+    // Ensure circles are loaded
+    if (state.circles.size === 0) {
+      loadCircles().then(circlesArray => {
+        state.circles = new Map(circlesArray.map(c => [c.name, c]));
+        renderCircleList();
+      });
+    } else {
+      renderCircleList();
+    }
+  }
   if (name === 'analytics') { $('#tab-analytics').innerHTML = renderAnalytics(); }
   if (name === 'approvals' && state.pairedAgentPubkey) { loadApprovals(); }
 }
