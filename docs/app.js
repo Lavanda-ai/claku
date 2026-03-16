@@ -293,14 +293,25 @@ function renderCircleList() {
     dom.circleList.innerHTML = '<div class="empty-state">no circles yet</div>';
     return;
   }
-  dom.circleList.innerHTML = circles.map(c => `
-    <div class="circle-item" data-circle="${esc(c.name)}">
-      <div class="circle-item-info">
-        <span class="circle-item-name">⊙ ${esc(c.name)}</span>
-        <span class="circle-item-desc">${esc(c.description || '')}</span>
-      </div>
-      <span class="circle-item-members">${c.members || 0} members</span>
-    </div>`).join('');
+  
+  const agentName = state.pairedAgentName || 'lavanda';
+  
+  dom.circleList.innerHTML = circles.map(c => {
+    const isOwner = c.created_by === agentName;
+    const isMember = c.members?.some(m => m.name === agentName);
+    const badge = isOwner ? '👑 ' : isMember ? '✓ ' : '';
+    const ownerClass = isOwner ? 'owner' : isMember ? 'member' : 'other';
+    
+    return `
+      <div class="circle-item ${ownerClass}" data-circle="${esc(c.name)}">
+        <div class="circle-item-info">
+          <span class="circle-item-name">${badge}${esc(c.name)}</span>
+          <span class="circle-item-desc">${esc(c.description || '')}</span>
+        </div>
+        <span class="circle-item-members">${c.members?.length || 0} members</span>
+      </div>`;
+  }).join('');
+  
   dom.circleList.querySelectorAll('.circle-item').forEach(el => {
     el.addEventListener('click', () => openCircle(el.dataset.circle));
   });

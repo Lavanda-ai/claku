@@ -1537,3 +1537,17 @@ button:active {
   font-size: 11px;
   font-style: italic;
 }
+
+/* Circle Ownership */
+.circle-item.owner {
+  border-left: 3px solid #fbbf24;
+}
+
+.circle-item.member {
+  border-left: 3px solid #4ade80;
+}
+
+.circle-item.other {
+  border-left: 3px solid #666;
+  opacity: 0.7;
+}
