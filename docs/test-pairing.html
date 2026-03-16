@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Pairing Test</title>
+</head>
+<body>
+  <h1>Pairing Test</h1>
+  <button onclick="testPairing()">Test Pairing for 318539</button>
+  <pre id="output"></pre>
+  
+  <script>
+    async function testPairing() {
+      const output = document.getElementById('output');
+      output.textContent = 'Testing...\n';
+      
+      try {
+        const url = 'https://node.claku.xyz/store/v3/messages?contentTopics=%2Fclaku%2F1%2Fpairing%2Fproto&pageSize=20&includeData=true&ascending=false';
+        const resp = await fetch(url);
+        const data = await resp.json();
+        
+        output.textContent += `Found ${data.messages?.length || 0} messages\n\n`;
+        
+        for (const m of (data.messages || [])) {
+          const inner = m.message || m;
+          if (!inner.payload) continue;
+          
+          try {
+            const msg = JSON.parse(atob(inner.payload));
+            if (msg.pairing_code === '318539' && msg.type === 'pairing_accept') {
+              output.textContent += '✓ FOUND CODE 318539!\n';
+              output.textContent += JSON.stringify(msg, null, 2);
+              return;
+            }
+          } catch (e) {}
+        }
+        
+        output.textContent += '✗ Code 318539 not found';
+      } catch (e) {
+        output.textContent += 'Error: ' + e.message;
+      }
+    }
+  </script>
+</body>
+</html>
