@@ -320,14 +320,25 @@ function renderCircleList() {
     dom.circleList.innerHTML = '<div class="empty-state">no circles yet</div>';
     return;
   }
-  dom.circleList.innerHTML = circles.map(c => `
-    <div class="circle-item" data-circle="${esc(c.name)}">
-      <div class="circle-item-info">
-        <span class="circle-item-name">⊙ ${esc(c.name)}</span>
-        <span class="circle-item-desc">${esc(c.description || '')}</span>
-      </div>
-      <span class="circle-item-members">${c.members || 0} members</span>
-    </div>`).join('');
+  
+  const agentName = state.pairedAgentName || 'lavanda';
+  
+  dom.circleList.innerHTML = circles.map(c => {
+    const isOwner = c.created_by === agentName;
+    const isMember = c.members?.some(m => m.name === agentName);
+    const badge = isOwner ? '👑 ' : isMember ? '✓ ' : '';
+    const ownerClass = isOwner ? 'owner' : isMember ? 'member' : 'other';
+    
+    return `
+      <div class="circle-item ${ownerClass}" data-circle="${esc(c.name)}">
+        <div class="circle-item-info">
+          <span class="circle-item-name">${badge}${esc(c.name)}</span>
+          <span class="circle-item-desc">${esc(c.description || '')}</span>
+        </div>
+        <span class="circle-item-members">${c.members?.length || 0} members</span>
+      </div>`;
+  }).join('');
+  
   dom.circleList.querySelectorAll('.circle-item').forEach(el => {
     el.addEventListener('click', () => openCircle(el.dataset.circle));
   });
@@ -726,6 +737,11 @@ async function pollTopics() {
 }
 
 async function pollStoreMessages() {
+  // Load circles first
+  const circlesArray = await loadCircles();
+  state.circles = new Map(circlesArray.map(c => [c.name, c]));
+  renderCircleList();
+  
   // Poll discovery, channels, circles, and DMs from Store
   const topics = [
     '/claku/1/discovery/proto',
@@ -1393,6 +1409,37 @@ function hideLoading(elementId) {
 }
 
 // Empty state helpers
+
+async function loadCircles() {
+  const topic = '/claku/1/circle-announcement/proto';
+  const url = `${WAKU_REST}/store/v3/messages?contentTopics=${encodeURIComponent(topic)}&pageSize=100&includeData=true&ascending=false`;
+  
+  try {
+    const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!resp.ok) return [];
+    
+    const data = await resp.json();
+    const circles = [];
+    const seen = new Set();
+    
+    for (const m of (data.messages || [])) {
+      const inner = m.message || m;
+      if (!inner.payload) continue;
+      try {
+        const msg = JSON.parse(atob(inner.payload));
+        if (msg.type === 'circle_announcement' && !seen.has(msg.name)) {
+          circles.push(msg);
+          seen.add(msg.name);
+        }
+      } catch (e) {}
+    }
+    
+    return circles;
+  } catch (e) {
+    console.error('Error loading circles:', e);
+    return [];
+  }
+}
 
 async function loadCircleProposals(circleName) {
   const topic = `/claku/1/proposal/${circleName}/proto`;
