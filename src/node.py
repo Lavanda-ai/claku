@@ -777,6 +777,16 @@ class ClakuNode:
                     result = {"status": "success", "message": f"Denied {approval_id}"}
                 else:
                     result = {"status": "error", "message": "Approval not found"}
+            elif command == "circle-delete":
+                circle_name = params.get("name", "")
+                if circle_name:
+                    success = self.circle_delete(circle_name)
+                    if success:
+                        result = {"status": "success", "message": f"Deleted circle '{circle_name}'"}
+                    else:
+                        result = {"status": "error", "message": f"Failed to delete circle '{circle_name}'"}
+                else:
+                    result = {"status": "error", "message": "Missing circle name"}
             else:
                 result = {"status": "error", "message": f"Unknown command: {command}"}
                 self._log_dashboard("command_error", {
