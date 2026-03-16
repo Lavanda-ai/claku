@@ -317,7 +317,7 @@ function renderCircleList() {
   });
 }
 
-function openCircle(name) {
+async function openCircle(name) {
   state.currentCircle = name;
   const circle = state.circles.get(name);
   if (!circle) return;
@@ -325,8 +325,13 @@ function openCircle(name) {
   dom.circleCreateForm.classList.add('hidden');
   dom.circleView.classList.remove('hidden');
   dom.circleViewName.textContent = '⊙ ' + name;
-  dom.circleViewMembers.textContent = (circle.members || 0) + ' members';
+  dom.circleViewMembers.textContent = (circle.members?.length || 0) + ' members';
   dom.circleViewDesc.textContent = circle.description || '';
+  
+  // Load proposals from Waku
+  const proposals = await loadCircleProposals(name);
+  circle.proposals = proposals;
+  
   renderProposals();
   subscribeCircle(name);
 }
@@ -345,9 +350,14 @@ function renderProposals() {
     return;
   }
   dom.proposalList.innerHTML = circle.proposals.map(p => {
+    const status = p.status === 'approved' ? '✅ Approved' : 
+                   p.status === 'rejected' ? '❌ Rejected' : 
+                   '⏳ Pending';
+    const statusClass = p.status || 'pending';
     const deadlineStr = p.deadline ? fmtTime(p.deadline) : '—';
     const proposalId = p.proposal_id || p.id;
-    return `<div class="proposal-card" data-proposal-id="${esc(proposalId)}">
+    return `<div class="proposal-card ${statusClass}" data-proposal-id="${esc(proposalId)}">
+      <div class="proposal-status">${status}</div>
       <div class="proposal-card-header">
         <span class="proposal-title">${esc(p.title)}</span>
         <span class="proposal-status ${esc(p.status)}">${esc(p.status)}</span>

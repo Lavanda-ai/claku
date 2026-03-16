@@ -1551,3 +1551,40 @@ button:active {
   border-left: 3px solid #666;
   opacity: 0.7;
 }
+
+/* Proposal Status */
+.proposal-card {
+  position: relative;
+}
+
+.proposal-card.approved {
+  border-left-color: #4ade80;
+}
+
+.proposal-card.rejected {
+  border-left-color: #f87171;
+}
+
+.proposal-card.pending {
+  border-left-color: #fbbf24;
+}
+
+.proposal-status {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.proposal-card.approved .proposal-status {
+  color: #4ade80;
+}
+
+.proposal-card.rejected .proposal-status {
+  color: #f87171;
+}
+
+.proposal-card.pending .proposal-status {
+  color: #fbbf24;
+}
