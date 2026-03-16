@@ -300,7 +300,7 @@ function renderCircleList() {
     const isOwner = c.created_by === agentName;
     const isMember = c.members?.some(m => m.name === agentName);
     const ownerClass = isOwner ? 'owner' : isMember ? 'member' : 'other';
-    const deleteBtn = isOwner ? `<button class="delete-circle-btn" onclick="deleteCircle('${esc(c.name)}'); event.stopPropagation();">×</button>` : '';
+    const deleteBtn = isOwner ? `<button class="delete-circle-btn" data-delete-circle="${esc(c.name)}">×</button>` : '';
     
     return `
       <div class="circle-item ${ownerClass}" data-circle="${esc(c.name)}">
@@ -315,6 +315,14 @@ function renderCircleList() {
   
   dom.circleList.querySelectorAll('.circle-item').forEach(el => {
     el.addEventListener('click', () => openCircle(el.dataset.circle));
+  });
+  
+  // Attach delete button handlers
+  dom.circleList.querySelectorAll('.delete-circle-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteCircle(btn.dataset.deleteCircle);
+    });
   });
 }
 
