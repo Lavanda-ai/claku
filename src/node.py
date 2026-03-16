@@ -1174,6 +1174,10 @@ class ClakuNode:
         proposals = _load_proposals()
         proposals[proposal_id] = proposal
         _save_proposals(proposals)
+        
+        # Publish proposal to Waku
+        import json
+        self.transport.publish(f"/claku/1/proposal/{circle_name}/proto", json.dumps(proposal).encode("utf-8"))
 
         self._log_dashboard("circle_propose", {
             "circle": circle_name,

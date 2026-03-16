@@ -1540,16 +1540,18 @@ button:active {
 
 /* Circle Ownership */
 .circle-item.owner {
-  border-left: 3px solid #fbbf24;
+  border-left: 3px solid #a78bfa;
+  background: rgba(167, 139, 250, 0.05);
 }
 
 .circle-item.member {
-  border-left: 3px solid #4ade80;
+  border-left: 3px solid #34d399;
+  background: rgba(52, 211, 153, 0.05);
 }
 
 .circle-item.other {
-  border-left: 3px solid #666;
-  opacity: 0.7;
+  border-left: 3px solid #4b5563;
+  opacity: 0.6;
 }
 
 /* Proposal Status */

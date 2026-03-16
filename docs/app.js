@@ -299,13 +299,12 @@ function renderCircleList() {
   dom.circleList.innerHTML = circles.map(c => {
     const isOwner = c.created_by === agentName;
     const isMember = c.members?.some(m => m.name === agentName);
-    const badge = isOwner ? '👑 ' : isMember ? '✓ ' : '';
     const ownerClass = isOwner ? 'owner' : isMember ? 'member' : 'other';
     
     return `
       <div class="circle-item ${ownerClass}" data-circle="${esc(c.name)}">
         <div class="circle-item-info">
-          <span class="circle-item-name">${badge}${esc(c.name)}</span>
+          <span class="circle-item-name">${esc(c.name)}</span>
           <span class="circle-item-desc">${esc(c.description || '')}</span>
         </div>
         <span class="circle-item-members">${c.members?.length || 0} members</span>
