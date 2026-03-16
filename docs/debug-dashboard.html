@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head><title>Dashboard Debug</title></head>
+<body>
+  <h1>Dashboard Debug</h1>
+  <button onclick="runDebug()">Run Full Debug</button>
+  <pre id="output" style="background:#000;color:#0f0;padding:20px;"></pre>
+  
+  <script>
+    const state = {
+      currentPairingCode: '666258',
+      paired: false
+    };
+    const seenMsgIds = new Set();
+    
+    async function runDebug() {
+      const out = document.getElementById('output');
+      out.textContent = '=== DASHBOARD DEBUG ===\n\n';
+      
+      // 1. Check state
+      out.textContent += '1. State Check:\n';
+      out.textContent += `   currentPairingCode: ${state.currentPairingCode}\n`;
+      out.textContent += `   paired: ${state.paired}\n`;
+      out.textContent += `   Should poll: ${state.currentPairingCode && !state.paired}\n\n`;
+      
+      // 2. Check Waku connectivity
+      out.textContent += '2. Waku Health:\n';
+      try {
+        const health = await fetch('https://node.claku.xyz/health');
+        const h = await health.json();
+        out.textContent += `   Status: ${h.nodeHealth}\n\n`;
+      } catch (e) {
+        out.textContent += `   Error: ${e.message}\n\n`;
+      }
+      
+      // 3. Poll pairing messages
+      out.textContent += '3. Polling Pairing Messages:\n';
+      try {
+        const url = 'https://node.claku.xyz/store/v3/messages?contentTopics=%2Fclaku%2F1%2Fpairing%2Fproto&pageSize=20&includeData=true&ascending=false';
+        const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        const data = await resp.json();
+        
+        out.textContent += `   Found ${data.messages?.length || 0} messages\n`;
+        
+        let foundOurs = false;
+        for (const m of (data.messages || [])) {
+          const inner = m.message || m;
+          if (!inner.payload) continue;
+          
+          try {
+            const msg = JSON.parse(atob(inner.payload));
+            
+            if (msg.pairing_code === state.currentPairingCode) {
+              out.textContent += `\n   ✓ Found our code ${state.currentPairingCode}:\n`;
+              out.textContent += `     Type: ${msg.type}\n`;
+              out.textContent += `     Agent: ${msg.agent_name}\n`;
+              out.textContent += `     msg_id: ${msg.msg_id}\n`;
+              
+              const id = msg.msg_id || JSON.stringify(msg).slice(0, 64);
+              out.textContent += `     Already seen: ${seenMsgIds.has(id)}\n`;
+              
+              if (!seenMsgIds.has(id)) {
+                out.textContent += `     Type match: ${msg.type === 'pairing_accept'}\n`;
+                out.textContent += `     Code match: ${msg.pairing_code === state.currentPairingCode}\n`;
+                out.textContent += `     SHOULD ROUTE: ${msg.type === 'pairing_accept' && msg.pairing_code === state.currentPairingCode}\n`;
+                foundOurs = true;
+              }
+            }
+          } catch (e) {}
+        }
+        
+        if (!foundOurs) {
+          out.textContent += `\n   ✗ Code ${state.currentPairingCode} not found or already seen\n`;
+        }
+        
+      } catch (e) {
+        out.textContent += `   Error: ${e.message}\n`;
+      }
+    }
+  </script>
+</body>
+</html>
